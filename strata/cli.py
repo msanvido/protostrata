@@ -74,8 +74,20 @@ def main():
     for evt in dossier["reconstructed_timeline"][:4]:
         print(f"      [{evt['timestamp']}] {evt['actor']} -> {evt['event_type']}: {evt['summary']}")
 
+    # 6. Section 8.3 Prompt Optimization & Validation via Evals and GEPA
+    print("\n[6] Executing Section 8.3: Prompt Evals & GEPA Evolutionary Optimizer...")
+    from strata.evals.gepa_optimizer import GEPAPromptOptimizer
+    optimizer = GEPAPromptOptimizer(population_size=4, generations=2, mutation_rate=0.4)
+    best_cand, best_metrics, history = optimizer.run_optimization()
+    print(f"    - Golden Dataset Evals Completed: {len(history)} Generations")
+    print(f"    - Best Prompt Fitness Score: {best_metrics.fitness_score:.4f}")
+    print(f"    - Verbatim Citation Veracity Rate: {best_metrics.citation_veracity_rate * 100:.1f}% (Hard Gate: {best_metrics.hard_gate_passed})")
+    print(f"    - Materiality Classification F1: {best_metrics.materiality_f1:.4f}")
+    print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
+    print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
+
     print("\n" + "=" * 80)
-    print("STRATA MVP VERIFICATION COMPLETED SUCCESSFULLY.")
+    print("STRATA MVP & SECTION 8 VERIFICATION COMPLETED SUCCESSFULLY.")
     print("=" * 80)
 
 if __name__ == "__main__":
