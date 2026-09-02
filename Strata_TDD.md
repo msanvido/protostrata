@@ -89,32 +89,32 @@ flowchart TD
 | **Analysis Pipeline** | `DiffEngine`, `CitationValidator`, `ChangeClassifier` | Aligns paragraph sequences, validates verbatim quotations against snapshots, and classifies change types/materiality. |
 | **Impact & Routing** | `VectorStore`, `ImpactMapper`, `ConfidenceRubric`, `ActionRouter` | Uses dense embeddings to retrieve candidate enterprise assets, evaluates confidence signals, and deterministically resolves owners and urgency. |
 | **Living State & Audit** | `EventStore`, `StrataService` | Projects chronological entity timelines and generates exportable audit dossiers showing system claims alongside human decisions. |
-| **Workspace UI** | `strata/ui/` (`index.html`, `style.css`, `app.js`) | Modern single-page interface providing visual diff inspection, action management, expert escalation review, and audit timelines. |
+| **Workspace UI** | React + Vite (`frontend/`) & FastAPI Static | Modern Single-Page Application (SPA) built with React 19, TypeScript, and Vite, providing visual diff inspection, action management, expert escalation review, and audit timelines. |
 
-### 2.3 Workspace UI Architecture & View Hierarchy
+### 2.3 Workspace UI Architecture & React Component Hierarchy
 
-The frontend is implemented as a lightweight, high-performance single-page application served directly from FastAPI:
-1. **Header Context Bar**:
-   - Proceeding selector (`FERC-RM22-14` vs `EPA-NSPS-KKKK`).
-   - Dynamic status badge (`FINAL RULE` in emerald, `PROPOSED` in amber).
-   - Real-time LLM backend indicator (`openrouter:gemini-2.5-flash`).
-   - "Run Live Analysis" primary trigger button.
-2. **Dashboard & Overview (`#tab-overview`)**:
-   - Executive metric cards: Active Capital Projects, Compliance Obligations, Material Changes Detected, and Items Requiring Expert Review.
-   - Summaries of enterprise project assets and governing compliance documents.
-3. **Change Records & Paired Citations (`#tab-changes`)**:
-   - Dual-column comparative diff cards displaying before (NOPR/Draft) and after (Final Mandate) quoted spans.
-   - Materiality and change-type taxonomy chips.
-   - Verifiable source coordinates and confidence badges.
-4. **Action Recommendations Inbox (`#tab-actions`)**:
-   - Filterable action cards categorized by urgency (`ACT_NOW` vs `MONITOR`) and state (`PENDING` vs `MODIFIED`).
-   - Non-destructive Human Override modal allowing reviewers to update directive text and submit mandatory compliance rationale.
-5. **Expert Review Queue (`#tab-expert`)**:
-   - High-visibility escalation queue for low-confidence or ambiguous items (`SIG_AMBIG_TERM`, `SIG_CITE_FAIL`).
-   - Inline decision resolution buttons (`Confirm Applicable`, `Dismiss as Exempt`) with audit log capture.
-6. **Living Audit Dossier (`#tab-audit`)**:
-   - Interactive stream explorer supporting queries on any obligation (`obligation:OBL-CEMS-02`), project, or proceeding.
-   - Visual chronological timeline rendering immutable system assertions and human overrides side-by-side.
+The frontend is implemented as a modern, reactive single-page application (SPA) built with **React, TypeScript, and Vite** (located in `frontend/`), designed to run independently in development (`npm run dev` with Vite proxying to FastAPI `:8000`) or built into optimized production assets (`dist/`) served directly by the backend:
+
+1. **State Management & Data Layer**:
+   - Asynchronous query cache and optimistic mutation hooks querying the FastAPI REST endpoints (`/proceedings`, `/projects`, `/obligations`, `/actions`, `/analyze`, `/audit`).
+   - Active proceeding context and filter state maintained in reactive application state.
+
+2. **Component Hierarchy**:
+   - `App`: Main layout shell with persistent Header and navigation tab switcher.
+   - `Header`: Active proceeding dropdown (`FERC-RM22-14` vs `EPA-NSPS-KKKK`), dynamic status badge (`FINAL RULE` in emerald, `PROPOSED` in amber), LLM backend indicator, and live analysis trigger.
+   - `OverviewTab`: Executive metric cards (Active Projects, Obligations, Material Changes, Escalations) and asset summary cards.
+   - `ChangeDiffViewer`: Dual-column comparative citation viewer rendering before/after quoted spans with exact character highlights and confidence tiers.
+   - `ActionInbox`: Filterable action recommendations grouped by urgency (`ACT_NOW`, `MONITOR`, `MODIFIED`) with owner attribution chips.
+   - `HumanOverrideModal`: Accessible modal capturing non-destructive modified directives alongside mandatory reviewer audit rationales.
+   - `ExpertReviewQueue`: Gated workflow for low-confidence items with trigger signal chips (`SIG_AMBIG_TERM`, `SIG_CITE_FAIL`) and inline resolution actions.
+   - `AuditTimelineStream`: Interactive event stream explorer reconstructing the defensible living compliance dossier for any entity.
+
+3. **Styling & Design System**:
+   - Curated dark mode theme with glassmorphic depth, crisp typography (`Inter`, `JetBrains Mono`), and semantic status colors:
+     - Emerald (`#10b981`): Final Rule / Verified Citations / High Confidence
+     - Amber (`#f59e0b`): Proposed Rules / Monitor Urgency / Pending Overrides
+     - Rose/Red (`#ef4444`): Escalated Items / Low Confidence / Material Alerts
+     - Indigo/Violet (`#6366f1`): Active Brand / Primary Interactive Controls
 
 ---
 
@@ -444,6 +444,7 @@ When a compliance officer modifies or rejects an action:
 | **Diffing Engine** | Python `difflib.SequenceMatcher` | Deterministic structural paragraph alignment without model hallucination risk. |
 | **LLM Classification** | Claude 3.5 Sonnet / Gemini Flash | Schema-constrained materiality and change classification. |
 | **Backend API** | FastAPI (Python 3.9+) | Lightweight REST service serving analysis, inboxes, expert queues, and audit exports. |
+| **Frontend SPA** | React 19 + TypeScript + Vite | Interactive regulatory operations workspace (inboxes, diff viewer, expert queue, living audit dossier). |
 | **Test Frameworks** | `behave` & `pytest` | Standard Cucumber/Gherkin BDD specifications and unit/integration quality gates. |
 
 ### 7.2 Production Evolution Path
