@@ -1,0 +1,17 @@
+ENVIRONMENTAL PROTECTION AGENCY
+40 CFR Part 60
+[EPA-HQ-OAR-2023-0105; FRL-9872-01-OAR]
+Standards of Performance for Stationary Combustion Turbines
+
+FINAL RULE
+(Issued May 20, 2025)
+This rule is effective August 1, 2025.
+
+### Section 1. Applicability and Affected Facilities
+The provisions of this subpart apply to each stationary combustion turbine with a heat input at peak load equal to or greater than 50 MMBtu/h. It remains ambiguous under this final rule whether behind-the-meter datacenter backup generation units qualify as an ancillary emergency generation asset exempt from selective catalytic reduction requirements.
+
+### Section 2. Emission Limits for Nitrogen Oxides (NOx)
+Owners and operators of simple-cycle natural gas-fired combustion turbines serving critical facilities must maintain emissions of nitrogen oxides (NOx) not to exceed 2.5 ppmvd at 15 percent O2 during all steady-state operating modes via selective catalytic reduction.
+
+### Section 3. Monitoring and Reporting Requirements
+The owner or operator must operate a certified continuous emission monitoring system (CEMS) measuring NOx on a 1-hour average basis. Quarterly compliance reports must be submitted to the Administrator within 30 days after the end of each calendar quarter.

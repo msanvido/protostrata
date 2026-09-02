@@ -1,0 +1,17 @@
+ENVIRONMENTAL PROTECTION AGENCY
+40 CFR Part 60
+[EPA-HQ-OAR-2023-0105]
+Standards of Performance for Stationary Combustion Turbines
+
+PROPOSED RULE
+(Issued September 10, 2024)
+Comments must be received by November 15, 2024.
+
+### Section 1. Applicability and Affected Facilities
+The provisions of this subpart are proposed to apply to all stationary combustion turbines with a heat input at peak load equal to or greater than 50 MMBtu/h that commenced construction, modification, or reconstruction after the proposal date.
+
+### Section 2. Emission Limits for Nitrogen Oxides (NOx)
+Owners and operators of simple-cycle natural gas-fired combustion turbines serving electric generation stations shall maintain emissions of nitrogen oxides (NOx) not to exceed 15 ppmvd at 15 percent O2 during baseload operation.
+
+### Section 3. Monitoring and Reporting Requirements
+The owner or operator must install, calibrate, maintain, and operate a continuous emission monitoring system (CEMS) for NOx. Semi-annual compliance summary reports must be submitted to the Administrator within 45 days after the end of each reporting period.

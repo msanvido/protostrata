@@ -1,0 +1,50 @@
+{
+  "user": {
+    "id": "u_solar_lead",
+    "name": "Marcus Vance",
+    "email": "m.vance@desertcleanpower.com",
+    "role": "ASSIGNEE"
+  },
+  "project": {
+    "id": "PROJ-SOLAR-DESERT-02",
+    "name": "Mojave Desert 250MW Solar Array & Battery Energy Storage",
+    "description": "250MW utility-scale photovoltaic solar array coupled with 100MW/400MWh battery energy storage on federal BLM desert land, interconnecting to 230kV transmission grid.",
+    "owner_id": "u_solar_lead",
+    "status": "ACTIVE",
+    "linked_obligations": ["OBL-TORTOISE-01", "OBL-RIDETHRU-03"],
+    "milestones": [
+      {"milestone_id": "m1", "name": "BLM Environmental Impact Signoff", "due_date": "2026-05-01", "status": "COMPLETED"},
+      {"milestone_id": "m2", "name": "Interconnection Inverter Testing", "due_date": "2026-11-01", "status": "IN_PROGRESS"}
+    ]
+  },
+  "documents": [
+    {
+      "id": "DOC-SOLAR-ENV-01",
+      "title": "Desert Tortoise Habitat Mitigation and Monitoring Protocol",
+      "doc_type": "POLICY",
+      "owner_id": "u_solar_lead",
+      "raw_text": "### Section 1. Wildlife Clearance Corridors\nAll solar panel perimeter fencing shall include dedicated clearance corridors for desert tortoise movement. Biologists must inspect construction zones daily to ensure zero tortoise mortality.\n\n### Section 2. Dust Suppression Water Allocation\nGroundwater extraction for access road compaction and array dust abatement is strictly capped at 50 acre-feet per calendar year."
+    },
+    {
+      "id": "DOC-SOLAR-GRID-03",
+      "title": "Inverter Ride-Through and Interconnection Agreement",
+      "doc_type": "CONTRACT",
+      "owner_id": "u_solar_lead",
+      "raw_text": "### Section 1. Voltage and Frequency Disturbance Performance\nAll central inverters and battery storage power conversion systems must possess dynamic capability to ride through voltage dips and frequency swings without tripping, conforming to IEEE Standard 2800."
+    }
+  ],
+  "obligations": [
+    {
+      "id": "OBL-TORTOISE-01",
+      "description": "Maintain active biological perimeter fencing and zero-mortality wildlife clearance corridors for desert tortoise protection.",
+      "owner_id": "u_solar_lead",
+      "linked_doc_id": "DOC-SOLAR-ENV-01"
+    },
+    {
+      "id": "OBL-RIDETHRU-03",
+      "description": "Maintain mandatory voltage and frequency ride-through on all solar and storage inverters under grid contingency conditions per IEEE 2800.",
+      "owner_id": "u_solar_lead",
+      "linked_doc_id": "DOC-SOLAR-GRID-03"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+UNITED STATES OF AMERICA
+FEDERAL ENERGY REGULATORY COMMISSION
+18 CFR Part 35
+[Docket No. RM22-14-000]
+Improvements to Generator Interconnection Procedures and Agreements
+
+NOTICE OF PROPOSED RULEMAKING
+(Issued June 16, 2022)
+
+### Section 1. Overview and Applicability
+The Federal Energy Regulatory Commission (Commission) proposes to reform its standard generator interconnection procedures and agreements. The Commission proposes to require transmission providers to adopt a first-ready, first-served cluster study process.
+
+### Section 2. Cluster Study Timelines
+Transmission providers may establish an annual cluster request window of 45 days. The Commission proposes that transmission providers shall make reasonable efforts to complete the comprehensive cluster interconnection study within 180 calendar days. 
+
+### Section 3. Inverter-Based Resource Requirements
+The Commission proposes that all newly interconnecting solar photovoltaic and battery storage resources should demonstrate voluntary capability to ride through transmission disturbances and maintain voltage support during frequency excursions.
+
+### Section 4. Commercial Readiness and Withdrawal Penalties
+To deter speculative interconnection requests, the Commission proposes that interconnection customers must submit an initial study deposit of $35,000 and demonstrate non-binding site control. Customers that withdraw without causing adverse network impacts shall be exempt from withdrawal penalties.

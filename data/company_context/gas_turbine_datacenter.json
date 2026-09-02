@@ -1,0 +1,43 @@
+{
+  "user": {
+    "id": "u_ops_lead",
+    "name": "Sarah Martinez",
+    "email": "s.martinez@datacenter-energy.com",
+    "role": "ASSIGNEE"
+  },
+  "project": {
+    "id": "PROJ-GT-DC-01",
+    "name": "Gas Turbine Substation for Tier 4 Hyperscale Datacenter",
+    "description": "On-site 120MW dual-fuel simple-cycle combustion turbine and 230kV substation to provide continuous primary and mission-critical backup power for datacenter facility.",
+    "owner_id": "u_ops_lead",
+    "status": "ACTIVE",
+    "linked_obligations": ["OBL-NOX-01", "OBL-CEMS-02"],
+    "milestones": [
+      {"milestone_id": "m1", "name": "SCR Commissioning", "due_date": "2026-06-30", "status": "IN_PROGRESS"},
+      {"milestone_id": "m2", "name": "Interconnection Telemetry Activation", "due_date": "2026-09-15", "status": "PLANNED"}
+    ]
+  },
+  "documents": [
+    {
+      "id": "DOC-GT-AIR-01",
+      "title": "Air Quality Operating Permit & SCR Compliance SOP",
+      "doc_type": "PROCEDURE",
+      "owner_id": "u_ops_lead",
+      "raw_text": "### Section 1. Nitrogen Oxides (NOx) Control\nThe 120MW simple-cycle gas turbine incorporates selective catalytic reduction (SCR) with aqueous ammonia injection. Steady-state NOx emissions shall not exceed 2.5 ppmvd at 15 percent O2.\n\n### Section 2. Emissions Monitoring and Reporting\nThe facility operates a continuous emission monitoring system (CEMS) calibrated per 40 CFR Part 60 Appendix B. Quarterly compliance summaries must be submitted within 30 days of quarter close."
+    }
+  ],
+  "obligations": [
+    {
+      "id": "OBL-NOX-01",
+      "description": "Maintain steady-state simple-cycle gas turbine NOx emissions at or below 2.5 ppmvd at 15% O2 using SCR systems.",
+      "owner_id": "u_ops_lead",
+      "linked_doc_id": "DOC-GT-AIR-01"
+    },
+    {
+      "id": "OBL-CEMS-02",
+      "description": "Conduct continuous NOx monitoring via CEMS and submit certified compliance reports within 30 days of each quarter end.",
+      "owner_id": "u_ops_lead",
+      "linked_doc_id": "DOC-GT-AIR-01"
+    }
+  ]
+}

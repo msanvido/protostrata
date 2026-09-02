@@ -1,0 +1,21 @@
+UNITED STATES OF AMERICA
+FEDERAL ENERGY REGULATORY COMMISSION
+18 CFR Part 35
+[Docket No. RM22-14-000; Order No. 2023]
+Improvements to Generator Interconnection Procedures and Agreements
+
+FINAL RULE
+(Issued July 28, 2023)
+This rule is effective November 6, 2023.
+
+### Section 1. Overview and Applicability
+The Federal Energy Regulatory Commission adopts a Final Rule amending its standard Small Generator Interconnection Procedures (SGIP) and Large Generator Interconnection Procedures (LGIP). Transmission providers must transition from the first-come, first-served serial queue to a mandatory first-ready, first-served cluster study methodology.
+
+### Section 2. Cluster Study Timelines
+Transmission providers shall establish an annual cluster request window of 45 days. The Commission eliminates reasonable efforts standards and mandates that transmission providers must complete each cluster study within a strict deadline of 150 calendar days. Transmission providers that fail to meet study deadlines shall be subject to financial penalties of $2,500 per business day.
+
+### Section 3. Inverter-Based Resource Requirements
+The Commission adopts mandatory technical performance requirements for all interconnecting non-synchronous generators. All newly interconnecting solar photovoltaic, battery storage, and inverter-based generation facilities must maintain continuous voltage and frequency ride-through capability in full compliance with IEEE Standard 2800-2022 during abnormal transmission system events.
+
+### Section 4. Commercial Readiness and Withdrawal Penalties
+Interconnection customers must submit an initial cluster study deposit of $100,000 and demonstrate 100% exclusive site control at the time of initial application. Interconnection customers that withdraw after the execution of the cluster study agreement shall be subject to mandatory tiered withdrawal penalties up to $500,000 to cover re-study costs.
