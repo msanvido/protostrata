@@ -472,6 +472,48 @@ PYTHONPATH=. behave features/
 | **4. Event Immutability** | `tests/test_database_and_events.py` | Appending events preserves chronological integrity and enables dossier reconstruction. |
 | **5. End-to-End Integration**| `tests/test_end_to_end.py` | Runs the full pipeline on real FERC and EPA regulations against the two enterprise test projects. |
 
+### 8.3 Prompt Optimization & Validation via Evals and GEPA Optimizer
+
+To guarantee high model fidelity while preventing prompt drift or regression, prompt development across Strata's interpretation components (Materiality Classifier, Dual-Grounding Impact Matcher, Action Recommender) is executed via an automated, evaluation-driven optimization pipeline.
+
+#### 8.3.1 Golden Evaluation Benchmarks (`evals`)
+An offline golden evaluation dataset of regulatory delta pairs and enterprise asset context is maintained to benchmark model performance against deterministic criteria:
+1. **Materiality Classification Benchmark**:
+   - Curated pairs of regulatory paragraph changes annotated with ground-truth materiality (`MATERIAL` vs `IMMATERIAL`) and change type taxonomy.
+   - Evaluated on precision, recall, and F1-score across regulatory categories (deadlines, emission ceilings, monitoring rules).
+2. **Citation Veracity & Span Accuracy**:
+   - Benchmarks whether the model quotes exact verbatim character spans or attempts loose paraphrasing.
+   - Target metric: $100\%$ programmatic substring verification pass rate.
+3. **Impact Mapping Grounding Benchmark**:
+   - Ground-truth mappings linking regulatory shifts to company obligations, measuring false discovery rate and dual-citation integrity.
+
+#### 8.3.2 GEPA (Generative Evolutionary Prompt Architecture) Optimizer
+To systematically discover optimal prompt structures and few-shot exemplars without manual trial-and-error, Strata employs a **GEPA-based evolutionary prompt optimization loop**:
+
+```
+┌───────────────────────────┐      Mutate / Generate Candidates      ┌─────────────────────────────┐
+│ Candidate Prompt Variants │───────────────────────────────────────▶│ Evaluation Runner (Evals)   │
+│ (System constraints,      │                                        │ (Golden benchmark execution │
+│  few-shot exemplars,      │◀───────────────────────────────────────│  over FERC & EPA dockets)   │
+│  reasoning instructions)  │     Multi-Objective Fitness Score      └──────────────┬──────────────┘
+└───────────────────────────┘     (Veracity + F1 + Brevity)                         │
+                                                                                    ▼
+                                                                     ┌─────────────────────────────┐
+                                                                     │ Continuous Validation Gate  │
+                                                                     │ Assert 0% citation fail &   │
+                                                                     │ pass all BDD/pytest suites  │
+                                                                     └─────────────────────────────┘
+```
+
+1. **Candidate Generation & Mutation**:
+   - The optimizer mutates candidate prompt elements: varying instruction phrasing, selecting targeted few-shot exemplars from historical dockets, refining chain-of-thought steps, and tuning explicit negative constraints.
+2. **Multi-Objective Programmatic Fitness Evaluation**:
+   - Fitness function balances:
+     $$\text{Fitness} = w_1 \cdot \text{Veracity}_{\text{cite}} + w_2 \cdot F1_{\text{materiality}} + w_3 \cdot \text{Grounding}_{\text{dual}} - w_4 \cdot \text{Latency}$$
+   - **Zero-Tolerance Hard Constraint**: Any prompt candidate generating a hallucinated or non-matching citation is immediately assigned a zero fitness score and pruned.
+3. **Continuous Deployment Gate**:
+   - Optimized prompt variants must pass the full Cucumber BDD (`behave`) and Pytest test suites before being promoted to production runtime configurations.
+
 ---
 
 ## 9. Requirements Traceability Matrix
