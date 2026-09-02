@@ -22,12 +22,13 @@ from strata.pipeline.confidence import ConfidenceRubric
 from strata.pipeline.action_router import ActionRouter
 
 class StrataService:
-    def __init__(self, db_path: str = "strata.db"):
+    def __init__(self, db_path: str = "strata.db", llm_client: Optional[Any] = None):
         self.db = Database(db_path)
         self.repo = StrataRepository(self.db)
         self.event_store = EventStore(self.db)
         self.vector_store = VectorStore()
         self.impact_mapper = ImpactMapper(self.vector_store)
+        self.llm_client = llm_client
 
     # --- Ingestion ---
     def ingest_user(self, user_id: str, name: str, email: str, role: UserRole) -> User:
@@ -175,7 +176,7 @@ class StrataService:
 
         # 3. Classify Diff Pairs & Validate Citations
         for pair in diff_pairs:
-            rec = ChangeClassifier.classify_diff_pair(pair, proceeding_id, prev_ver, curr_ver)
+            rec = ChangeClassifier.classify_diff_pair(pair, proceeding_id, prev_ver, curr_ver, llm_client=self.llm_client)
             
             # Programmatic Citation Validation
             if rec.after_citation:

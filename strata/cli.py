@@ -1,15 +1,36 @@
 import sys
 import json
+import argparse
 from strata.seed import seed_database
+from strata.llm.client import LLMClient
 
 def main():
+    parser = argparse.ArgumentParser(description="Strata Regulatory Operations & Intelligence Workspace")
+    parser.add_argument("--llm", type=str, default=None, help="LLM Provider: openrouter, gemini, anthropic, openai, ollama, or mock")
+    parser.add_argument("--model", type=str, default=None, help="Specific model ID (e.g., google/gemini-2.5-flash, gpt-4o-mini)")
+    parser.add_argument("--skip-evals", action="store_true", help="Skip running GEPA prompt evals loop")
+    args = parser.parse_args()
+
     print("=" * 80)
     print("STRATA REGULATORY INTELLIGENCE & OPERATIONS WORKSPACE (MVP DEMO)")
     print("=" * 80)
 
+    # Configure optional Live LLM
+    llm_client = None
+    if args.llm and args.llm != "mock":
+        llm_client = LLMClient(provider=args.llm, model=args.model)
+        print(f"\n[*] Live LLM Backend Enabled:")
+        print(f"    - Provider: {llm_client.provider}")
+        print(f"    - Model:    {llm_client.model}")
+    else:
+        print("\n[*] Backend: High-Speed Deterministic Offline Rules Engine (Default)")
+
     # 1. Initialize and Seed
     print("\n[1] Initializing SQLite database and seeding enterprise projects & regulations...")
     svc = seed_database("strata.db")
+    if llm_client:
+        svc.llm_client = llm_client
+
     print("    - Seeded Project 1: Gas Turbine Substation for Tier 4 Datacenter (PROJ-GT-DC-01)")
     print("    - Seeded Project 2: Mojave Desert 250MW Solar Array & Storage (PROJ-SOLAR-DESERT-02)")
     print("    - Ingested FERC Order 2023 (NOPR vs Final Rule)")
@@ -75,16 +96,17 @@ def main():
         print(f"      [{evt['timestamp']}] {evt['actor']} -> {evt['event_type']}: {evt['summary']}")
 
     # 6. Section 8.3 Prompt Optimization & Validation via Evals and GEPA
-    print("\n[6] Executing Section 8.3: Prompt Evals & GEPA Evolutionary Optimizer...")
-    from strata.evals.gepa_optimizer import GEPAPromptOptimizer
-    optimizer = GEPAPromptOptimizer(population_size=4, generations=2, mutation_rate=0.4)
-    best_cand, best_metrics, history = optimizer.run_optimization()
-    print(f"    - Golden Dataset Evals Completed: {len(history)} Generations")
-    print(f"    - Best Prompt Fitness Score: {best_metrics.fitness_score:.4f}")
-    print(f"    - Verbatim Citation Veracity Rate: {best_metrics.citation_veracity_rate * 100:.1f}% (Hard Gate: {best_metrics.hard_gate_passed})")
-    print(f"    - Materiality Classification F1: {best_metrics.materiality_f1:.4f}")
-    print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
-    print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
+    if not args.skip_evals:
+        print("\n[6] Executing Section 8.3: Prompt Evals & GEPA Evolutionary Optimizer...")
+        from strata.evals.gepa_optimizer import GEPAPromptOptimizer
+        optimizer = GEPAPromptOptimizer(population_size=4, generations=2, mutation_rate=0.4)
+        best_cand, best_metrics, history = optimizer.run_optimization()
+        print(f"    - Golden Dataset Evals Completed: {len(history)} Generations")
+        print(f"    - Best Prompt Fitness Score: {best_metrics.fitness_score:.4f}")
+        print(f"    - Verbatim Citation Veracity Rate: {best_metrics.citation_veracity_rate * 100:.1f}% (Hard Gate: {best_metrics.hard_gate_passed})")
+        print(f"    - Materiality Classification F1: {best_metrics.materiality_f1:.4f}")
+        print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
+        print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
 
     print("\n" + "=" * 80)
     print("STRATA MVP & SECTION 8 VERIFICATION COMPLETED SUCCESSFULLY.")

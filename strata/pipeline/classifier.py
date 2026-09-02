@@ -11,7 +11,7 @@ class ChangeClassifier:
     DEFINITION_KEYWORDS = [r"\bdefined\s+as\b", r"\bmeans\b", r"\bterm\b", r"\bdefinition\b"]
 
     @classmethod
-    def classify_diff_pair(cls, diff_pair: Dict[str, Any], proceeding_id: str, from_version: ProceedingVersion, to_version: ProceedingVersion) -> ChangeRecord:
+    def classify_diff_pair(cls, diff_pair: Dict[str, Any], proceeding_id: str, from_version: ProceedingVersion, to_version: ProceedingVersion, llm_client: Optional[Any] = None) -> ChangeRecord:
         diff_type = diff_pair["diff_type"]
         prev_p = diff_pair["prev_para"]
         curr_p = diff_pair["curr_para"]
@@ -44,12 +44,45 @@ class ChangeClassifier:
         # Check materiality
         is_material = cls._is_material(diff_type, prev_p, curr_p)
         change_type = cls._determine_change_type(diff_type, prev_p, curr_p)
-        
         description = cls._generate_description(change_type, is_material, prev_p, curr_p)
         
         # Evaluate confidence
         confidence = ConfidenceTier.HIGH
         signals = []
+
+        # Optional Live LLM Enrichment
+        if llm_client and getattr(llm_client, "provider", "mock") != "mock" and curr_p:
+            try:
+                llm_out = llm_client.classify_materiality(
+                    prev_p["text"] if prev_p else "",
+                    curr_p["text"] if curr_p else ""
+                )
+                if "materiality" in llm_out:
+                    is_material = (str(llm_out["materiality"]).upper() == "MATERIAL")
+                if "change_type" in llm_out:
+                    c_type_str = str(llm_out["change_type"]).upper()
+                    matched_type = next((t for t in ChangeType if t.value == c_type_str or t.name == c_type_str), None)
+                    if matched_type:
+                        change_type = matched_type
+                if "description" in llm_out:
+                    description = f"[{llm_client.model}] {llm_out['description']}"
+                
+                # Verify LLM citation span deterministically
+                if llm_out.get("verbatim_quote"):
+                    v_quote = llm_out["verbatim_quote"]
+                    if curr_p and v_quote in curr_p["text"]:
+                        after_citation = Citation(
+                            document_id=proceeding_id,
+                            version_id=to_version.id,
+                            section_id=curr_p["section_id"],
+                            para_id=curr_p["para_id"],
+                            quoted_text=v_quote
+                        )
+                    else:
+                        signals.append("SIG_CITE_FAIL: LLM quoted span failed exact substring check")
+                        confidence = ConfidenceTier.LOW
+            except Exception as e:
+                signals.append(f"SIG_LLM_FALLBACK: {str(e)[:60]}")
         
         # Check for undefined ambiguous terms
         if re.search(r"\b(ancillary emergency generation asset|reasonable efforts|as appropriate)\b", target_text, re.IGNORECASE):
