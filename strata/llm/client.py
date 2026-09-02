@@ -8,11 +8,11 @@ class LLMClient:
     """Unified LLM client supporting OpenRouter, Gemini, Anthropic, OpenAI, Ollama, and Mock offline fallback."""
 
     def __init__(self, provider: Optional[str] = None, model: Optional[str] = None):
-        # Determine provider
+        # Determine provider (default: openrouter)
         if provider:
             self.provider = provider.lower()
         elif os.environ.get("STRATA_LLM_PROVIDER"):
-            self.provider = os.environ.get("STRATA_LLM_PROVIDER", "mock").lower()
+            self.provider = os.environ.get("STRATA_LLM_PROVIDER").lower()
         elif os.environ.get("OPENROUTER_API_KEY"):
             self.provider = "openrouter"
         elif os.environ.get("GEMINI_API_KEY"):
@@ -22,9 +22,9 @@ class LLMClient:
         elif os.environ.get("OPENAI_API_KEY"):
             self.provider = "openai"
         else:
-            self.provider = "mock"
+            self.provider = "openrouter"
 
-        # Default models per provider
+        # Default models per provider (default: google/gemini-2.5-flash)
         default_models = {
             "openrouter": "google/gemini-2.5-flash",
             "gemini": "gemini-1.5-flash",

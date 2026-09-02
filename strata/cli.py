@@ -6,8 +6,8 @@ from strata.llm.client import LLMClient
 
 def main():
     parser = argparse.ArgumentParser(description="Strata Regulatory Operations & Intelligence Workspace")
-    parser.add_argument("--llm", type=str, default=None, help="LLM Provider: openrouter, gemini, anthropic, openai, ollama, or mock")
-    parser.add_argument("--model", type=str, default=None, help="Specific model ID (e.g., google/gemini-2.5-flash, gpt-4o-mini)")
+    parser.add_argument("--llm", type=str, default="openrouter", help="LLM Provider: openrouter (default), gemini, anthropic, openai, ollama, or mock")
+    parser.add_argument("--model", type=str, default="google/gemini-2.5-flash", help="Specific model ID (default: google/gemini-2.5-flash)")
     parser.add_argument("--skip-evals", action="store_true", help="Skip running GEPA prompt evals loop")
     args = parser.parse_args()
 
@@ -15,7 +15,7 @@ def main():
     print("STRATA REGULATORY INTELLIGENCE & OPERATIONS WORKSPACE (MVP DEMO)")
     print("=" * 80)
 
-    # Configure optional Live LLM
+    # Configure Live LLM (default: openrouter + google/gemini-2.5-flash)
     llm_client = None
     if args.llm and args.llm != "mock":
         llm_client = LLMClient(provider=args.llm, model=args.model)
@@ -23,7 +23,7 @@ def main():
         print(f"    - Provider: {llm_client.provider}")
         print(f"    - Model:    {llm_client.model}")
     else:
-        print("\n[*] Backend: High-Speed Deterministic Offline Rules Engine (Default)")
+        print("\n[*] Backend: High-Speed Deterministic Offline Rules Engine (Mock)")
 
     # 1. Initialize and Seed
     print("\n[1] Initializing SQLite database and seeding enterprise projects & regulations...")
