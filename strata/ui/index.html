@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Strata — Regulatory Intelligence & Living Operations Workspace</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-logo">
+        <span class="logo-strata">STRATA</span>
+        <span class="logo-tag">OPS WORKSPACE</span>
+      </div>
+      <div class="header-divider"></div>
+      <div class="header-context">
+        <label for="proceeding-select">Proceeding:</label>
+        <select id="proceeding-select" class="dropdown">
+          <option value="FERC-RM22-14">FERC RM22-14 / Order 2023 (Interconnection)</option>
+          <option value="EPA-NSPS-KKKK">EPA NSPS Subpart KKKK (Combustion Turbines)</option>
+        </select>
+        <span id="proceeding-status-badge" class="badge badge-final">FINAL RULE</span>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button id="btn-run-analysis" class="btn btn-primary">
+        <span class="btn-icon">⚡</span> Run Live Analysis
+      </button>
+      <div class="header-stat">
+        <span class="stat-label">LLM Provider:</span>
+        <span id="stat-llm" class="stat-value">openrouter:gemini-2.5-flash</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="app-nav">
+    <div class="nav-tabs">
+      <button class="nav-tab active" data-tab="tab-overview">Dashboard & Overview</button>
+      <button class="nav-tab" data-tab="tab-changes">
+        Change Records <span id="badge-changes-count" class="tab-pill">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-actions">
+        Action Inbox <span id="badge-actions-count" class="tab-pill">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-expert">
+        Expert Review Queue <span id="badge-expert-count" class="tab-pill alert">0</span>
+      </button>
+      <button class="nav-tab" data-tab="tab-audit">Living Audit Dossier</button>
+    </div>
+    <div class="nav-meta">
+      <span class="meta-item">Enterprise Context: <strong>2 Projects · 4 Obligations</strong></span>
+    </div>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="app-main">
+    <!-- TAB 1: DASHBOARD & OVERVIEW -->
+    <section id="tab-overview" class="tab-content active">
+      <div class="grid-cards">
+        <div class="card stat-card">
+          <div class="stat-title">Active Projects</div>
+          <div id="metric-projects" class="stat-number">2</div>
+          <div class="stat-desc">Gas Turbine DC (120MW) & Mojave Solar (250MW)</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-title">Governing Obligations</div>
+          <div id="metric-obligations" class="stat-number">4</div>
+          <div class="stat-desc">NOx (2.5ppm), CEMS (30d), Tortoise, IEEE 2800</div>
+        </div>
+        <div class="card stat-card">
+          <div class="stat-title">Material Changes Detected</div>
+          <div id="metric-material" class="stat-number">0</div>
+          <div class="stat-desc">Deterministic sequence alignment deltas</div>
+        </div>
+        <div class="card stat-card alert">
+          <div class="stat-title">Items Requiring Review</div>
+          <div id="metric-escalated" class="stat-number">0</div>
+          <div class="stat-desc">Gated by transparent confidence rubric</div>
+        </div>
+      </div>
+
+      <div class="grid-split mt-4">
+        <!-- Projects Summary -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Enterprise Capital Projects</h3>
+          </div>
+          <div id="projects-list" class="card-body">
+            <div class="loading-spinner">Loading projects...</div>
+          </div>
+        </div>
+
+        <!-- Obligations Summary -->
+        <div class="card">
+          <div class="card-header">
+            <h3>Compliance Obligations</h3>
+          </div>
+          <div id="obligations-list" class="card-body">
+            <div class="loading-spinner">Loading obligations...</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: CHANGE RECORDS & PAIRED CITATIONS -->
+    <section id="tab-changes" class="tab-content">
+      <div class="section-intro">
+        <h2>Detected Regulatory Deltas & Citation Grounding</h2>
+        <p>Changes detected via structural sequence alignment and evaluated for materiality. Every change is verified against immutable document character spans.</p>
+      </div>
+      <div id="changes-container" class="change-cards-list">
+        <div class="empty-state">No changes analyzed yet. Click "Run Live Analysis" to trigger change detection.</div>
+      </div>
+    </section>
+
+    <!-- TAB 3: ACTION INBOX -->
+    <section id="tab-actions" class="tab-content">
+      <div class="section-intro">
+        <h2>Routed Action Recommendations</h2>
+        <p>Operational directives derived from regulatory changes and grounded in internal obligations. Action urgency is deterministically gated by docket status.</p>
+      </div>
+      <div class="inbox-filters">
+        <button class="filter-btn active" data-filter="ALL">All Actions</button>
+        <button class="filter-btn" data-filter="ACT_NOW">Act Now (Final)</button>
+        <button class="filter-btn" data-filter="MONITOR">Monitor (Draft)</button>
+        <button class="filter-btn" data-filter="MODIFIED">Human Overrides</button>
+      </div>
+      <div id="actions-container" class="actions-list">
+        <div class="empty-state">No active recommendations. Run analysis to route actions.</div>
+      </div>
+    </section>
+
+    <!-- TAB 4: EXPERT REVIEW QUEUE -->
+    <section id="tab-expert" class="tab-content">
+      <div class="section-intro alert-banner">
+        <div class="alert-icon">⚠️</div>
+        <div>
+          <h2>Expert Review Queue (Confidence Gating)</h2>
+          <p>Under PRD FR6, low-confidence interpretations or ambiguous statutory terms are structurally blocked from auto-creating operational tasks until resolved by qualified legal counsel.</p>
+        </div>
+      </div>
+      <div id="expert-items-container" class="expert-list">
+        <div class="empty-state">Queue is clear. No ambiguous changes pending review.</div>
+      </div>
+    </section>
+
+    <!-- TAB 5: LIVING AUDIT DOSSIER -->
+    <section id="tab-audit" class="tab-content">
+      <div class="section-intro">
+        <h2>Living Entity State & Defensible Audit Timeline</h2>
+        <p>Append-only event stream reconstructing the complete decision history without loss of original system assertions or human modifications.</p>
+      </div>
+      <div class="audit-controls">
+        <label for="audit-stream-input">Stream Identifier:</label>
+        <input type="text" id="audit-stream-input" class="input-text" value="obligation:OBL-CEMS-02" placeholder="e.g. obligation:OBL-CEMS-02 or project:PROJ-GT-DC-01">
+        <button id="btn-load-audit" class="btn btn-secondary">Load Living Dossier</button>
+        <button id="btn-load-solar-audit" class="btn btn-ghost">Solar Ride-Through Dossier</button>
+      </div>
+      <div id="audit-dossier-container" class="audit-dossier-view card mt-3">
+        <div class="card-body">
+          <div class="empty-state">Click "Load Living Dossier" to reconstruct timeline.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- MODAL: Human Override -->
+  <div id="override-modal" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Record Non-Destructive Human Override</h3>
+        <button id="modal-close-btn" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-info">Original system recommendations are preserved in the immutable event log alongside your revised instruction.</p>
+        <div class="form-group">
+          <label>Original System Recommendation:</label>
+          <div id="modal-original-text" class="quote-box"></div>
+        </div>
+        <div class="form-group">
+          <label for="override-text-input">Modified Operational Directive:</label>
+          <textarea id="override-text-input" class="textarea" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="override-rationale-input">Mandatory Reviewer Rationale:</label>
+          <textarea id="override-rationale-input" class="textarea" rows="2" placeholder="Explain why the system recommendation was adjusted for compliance defensibility..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="modal-cancel-btn" class="btn btn-ghost">Cancel</button>
+        <button id="modal-save-btn" class="btn btn-primary">Commit Override</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

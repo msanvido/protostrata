@@ -103,6 +103,11 @@ Owns a specific compliance obligation, project workstream, or internal document 
 - FR7.2: All state transitions (draft→final, action pending→done, low-confidence→resolved) are append-only events; nothing is silently overwritten.
 - FR7.3: A full audit export (per obligation/project or company-wide, for a date range) must be producible showing: what changed, when the company became aware, what was concluded, what was done, and by whom.
 - FR7.4: Human overrides of any system claim/mapping/action are recorded alongside the original system output — never replacing it, always alongside it (for defensibility: "the system said X, a human corrected to Y, on this date").
+- FR7.5: Modern single-page Workspace User Interface:
+  - FR7.5.1: Multi-view workspace providing Dashboard & Overview, Change Records & Paired Citations, Action Inbox, Expert Review Queue, and Living Audit Dossier.
+  - FR7.5.2: Side-by-side comparative citation viewer with highlighted character offsets into immutable source snapshots.
+  - FR7.5.3: Non-destructive human override modal capturing reviewer modification and mandatory audit rationale.
+  - FR7.5.4: Expert review queue resolution workflow allowing legal counsel to confirm or dismiss ambiguous items with recorded justification.
 
 ## 6. Success Metrics (for the challenge demo)
 

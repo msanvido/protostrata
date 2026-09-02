@@ -89,6 +89,32 @@ flowchart TD
 | **Analysis Pipeline** | `DiffEngine`, `CitationValidator`, `ChangeClassifier` | Aligns paragraph sequences, validates verbatim quotations against snapshots, and classifies change types/materiality. |
 | **Impact & Routing** | `VectorStore`, `ImpactMapper`, `ConfidenceRubric`, `ActionRouter` | Uses dense embeddings to retrieve candidate enterprise assets, evaluates confidence signals, and deterministically resolves owners and urgency. |
 | **Living State & Audit** | `EventStore`, `StrataService` | Projects chronological entity timelines and generates exportable audit dossiers showing system claims alongside human decisions. |
+| **Workspace UI** | `strata/ui/` (`index.html`, `style.css`, `app.js`) | Modern single-page interface providing visual diff inspection, action management, expert escalation review, and audit timelines. |
+
+### 2.3 Workspace UI Architecture & View Hierarchy
+
+The frontend is implemented as a lightweight, high-performance single-page application served directly from FastAPI:
+1. **Header Context Bar**:
+   - Proceeding selector (`FERC-RM22-14` vs `EPA-NSPS-KKKK`).
+   - Dynamic status badge (`FINAL RULE` in emerald, `PROPOSED` in amber).
+   - Real-time LLM backend indicator (`openrouter:gemini-2.5-flash`).
+   - "Run Live Analysis" primary trigger button.
+2. **Dashboard & Overview (`#tab-overview`)**:
+   - Executive metric cards: Active Capital Projects, Compliance Obligations, Material Changes Detected, and Items Requiring Expert Review.
+   - Summaries of enterprise project assets and governing compliance documents.
+3. **Change Records & Paired Citations (`#tab-changes`)**:
+   - Dual-column comparative diff cards displaying before (NOPR/Draft) and after (Final Mandate) quoted spans.
+   - Materiality and change-type taxonomy chips.
+   - Verifiable source coordinates and confidence badges.
+4. **Action Recommendations Inbox (`#tab-actions`)**:
+   - Filterable action cards categorized by urgency (`ACT_NOW` vs `MONITOR`) and state (`PENDING` vs `MODIFIED`).
+   - Non-destructive Human Override modal allowing reviewers to update directive text and submit mandatory compliance rationale.
+5. **Expert Review Queue (`#tab-expert`)**:
+   - High-visibility escalation queue for low-confidence or ambiguous items (`SIG_AMBIG_TERM`, `SIG_CITE_FAIL`).
+   - Inline decision resolution buttons (`Confirm Applicable`, `Dismiss as Exempt`) with audit log capture.
+6. **Living Audit Dossier (`#tab-audit`)**:
+   - Interactive stream explorer supporting queries on any obligation (`obligation:OBL-CEMS-02`), project, or proceeding.
+   - Visual chronological timeline rendering immutable system assertions and human overrides side-by-side.
 
 ---
 
