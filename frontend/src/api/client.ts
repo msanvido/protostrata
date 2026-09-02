@@ -1,0 +1,77 @@
+import type { 
+  Project, 
+  Obligation, 
+  Proceeding, 
+  ActionRecommendation, 
+  AnalysisResult, 
+  AuditDossier 
+} from '../types';
+
+export const api = {
+  async getProjects(): Promise<Project[]> {
+    const res = await fetch('/projects');
+    if (!res.ok) throw new Error('Failed to fetch projects');
+    return res.json();
+  },
+
+  async getObligations(): Promise<Obligation[]> {
+    const res = await fetch('/obligations');
+    if (!res.ok) throw new Error('Failed to fetch obligations');
+    return res.json();
+  },
+
+  async getProceedings(): Promise<Proceeding[]> {
+    const res = await fetch('/proceedings');
+    if (!res.ok) throw new Error('Failed to fetch proceedings');
+    return res.json();
+  },
+
+  async getActions(ownerId?: string, state?: string): Promise<ActionRecommendation[]> {
+    const params = new URLSearchParams();
+    if (ownerId) params.append('owner_id', ownerId);
+    if (state) params.append('state', state);
+    const res = await fetch(`/actions?${params.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch actions');
+    return res.json();
+  },
+
+  async runAnalysis(proceedingId: string, prevVersionId: string, currVersionId: string): Promise<AnalysisResult> {
+    const res = await fetch(`/analyze?proceeding_id=${proceedingId}&prev_version_id=${prevVersionId}&curr_version_id=${currVersionId}`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async recordOverride(actionId: string, userId: string, updatedText: string, rationale: string): Promise<ActionRecommendation> {
+    const params = new URLSearchParams({
+      user_id: userId,
+      updated_text: updatedText,
+      rationale: rationale
+    });
+    const res = await fetch(`/actions/${actionId}/override?${params.toString()}`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async resolveExpertReview(targetId: string, reviewerId: string, decision: string, rationale: string): Promise<any> {
+    const params = new URLSearchParams({
+      reviewer_id: reviewerId,
+      decision: decision,
+      rationale: rationale
+    });
+    const res = await fetch(`/expert_review/${targetId}/resolve?${params.toString()}`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async getAuditDossier(streamId: string): Promise<AuditDossier> {
+    const res = await fetch(`/audit/${encodeURIComponent(streamId)}`);
+    if (!res.ok) throw new Error('Failed to fetch audit dossier');
+    return res.json();
+  }
+};

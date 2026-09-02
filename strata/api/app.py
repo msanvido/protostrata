@@ -7,9 +7,26 @@ from strata.service import StrataService
 from strata.seed import seed_database
 import os
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Strata Regulatory Operations API", version="1.0")
 
-# Mount UI static assets
+# Enable CORS for Vite dev server
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Mount React production build assets if present
+react_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))
+react_assets = os.path.join(react_dist, "assets")
+if os.path.exists(react_assets):
+    app.mount("/assets", StaticFiles(directory=react_assets), name="assets")
+
+# Mount fallback UI static assets
 ui_dir = os.path.join(os.path.dirname(__file__), "..", "ui")
 if os.path.exists(ui_dir):
     app.mount("/static", StaticFiles(directory=ui_dir), name="static")
@@ -26,6 +43,9 @@ def startup_event():
 
 @app.get("/", response_class=HTMLResponse)
 def get_ui():
+    react_index = os.path.join(react_dist, "index.html")
+    if os.path.exists(react_index):
+        return FileResponse(react_index)
     index_path = os.path.join(os.path.dirname(__file__), "..", "ui", "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
