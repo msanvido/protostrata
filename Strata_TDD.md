@@ -20,6 +20,12 @@ Strata is a **change-to-action workspace** that ingests regulatory proceedings a
 4. **Confidence Gates Action**: A transparent multi-signal rubric governs confidence. Low-confidence or ambiguous items are structurally blocked by the state machine from creating pending operational actions and route exclusively to an Expert Review Queue.
 5. **Canonical Addressability**: Ingested proceedings and internal documents are parsed into a uniform coordinate tree (`doc_id → version_id → section_id → para_id → sentence_id → char_span`). Citations are stable, resolvable pointers.
 
+### 1.3 MVP Scoping: Local-First Baseline
+For the initial MVP build, the system is strictly scoped to a **local-first, self-contained architecture**:
+- **Zero Cloud Infrastructure**: Operates on a local SQLite database (`strata.db`) and local Python runtime.
+- **Reproducible & Deterministic**: Runs fully offline with deterministic diffing and local/embedded vector stores, eliminating external cloud dependency risks or cold-start network latency during initial demonstration and evaluation.
+- **Cloud Readiness**: Storage abstractions and service APIs are decoupled, enabling drop-in migration to cloud serverless or container platforms post-MVP.
+
 ---
 
 ## 2. High-Level Architecture
@@ -419,6 +425,24 @@ When a compliance officer modifies or rejects an action:
 - **Document Store**: S3-compatible WORM (Write Once, Read Many) object storage for raw regulatory filings.
 - **Streaming & Event Store**: EventStoreDB or Kafka for multi-jurisdiction distributed docket streams.
 - **Identity & RBAC**: SAML / OIDC enterprise SSO for role-based action routing and audit attribution.
+
+### 7.3 Deployment Alternatives & Platform Evaluation
+
+While the **local-first baseline is retained for the MVP**, the architecture maps cleanly to modern serverless and edge platforms:
+
+1. **Cloudflare Edge Stack (Recommended Serverless Target)**:
+   - **Database**: **Cloudflare D1** provides native serverless SQLite at the edge. The MVP schema runs on D1 without modifications.
+   - **Vector Search & Embeddings**: **Cloudflare Vectorize** paired with **Workers AI** (`bge-small-en-v1.5`) executes embedding generation and similarity search natively at the edge without heavy Python/PyTorch dependencies.
+   - **Document Storage**: **Cloudflare R2** (S3-compatible, zero egress fees) for immutable PDF/HTML snapshots.
+   - **Workspace UI**: **Cloudflare Pages** for global edge hosting of the React/Vite frontend.
+
+2. **Vercel Serverless Stack**:
+   - **Frontend**: Native Next.js / React hosting on Vercel's edge network.
+   - **Backend API**: Python Serverless Functions (`api/index.py` wrapping FastAPI).
+   - **Storage Constraint**: Because Vercel functions have an ephemeral local disk (wiped between cold starts), a local `strata.db` file cannot persist state. To deploy on Vercel, the database must be backed by a serverless cloud database such as **Turso** (libSQL / SQLite over HTTP) or **Neon** (serverless Postgres).
+
+3. **Containerized Cloud Stack (Zero Code Changes)**:
+   - Platforms like **Fly.io**, **Railway**, or **Google Cloud Run** allow deploying the existing Python FastAPI container alongside a mounted persistent volume for `strata.db`, requiring zero architectural adaptations from the local MVP.
 
 ---
 
