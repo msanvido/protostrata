@@ -1,455 +1,183 @@
-# Strata — System Architecture & Technical Design Document (TDD)
+# Strata — Technical Design Document (TDD)
 
 **A citation-grade regulatory intelligence and operations workspace for regulated enterprises**
 
-Version: 1.2 · Status: Unified MVP Architecture & Technical Design · Companion to `Strata_PRD.md`
+Version: 1.3 · Status: Approved MVP Technical Design · Companion to `Strata_PRD.md`
 
 ---
 
-## 1. Executive Summary, MVP Scope & Design Principles
+## 1. System Overview & Design Principles
 
-### 1.1 Executive Summary & Problem Context
+### 1.1 Overview & Scope
+Regulated enterprises face a continuous influx of regulatory proceedings (dockets, NPRMs, revised drafts, final orders) that affect internal obligations, governing documents (policies, SOPs, contracts), and capital projects. 
 
-Regulated enterprises (utilities, energy operators, financial institutions, healthcare providers) operate within a continuous flow of regulatory proceedings: Notices of Proposed Rulemaking (NPRMs), staff whitepapers, draft revisions, and binding final orders. Each proceeding evolves across multiple versions, subtly altering compliance requirements, technical thresholds, and reporting timelines in ways that ripple directly into governing documents (policies, SOPs, contracts), internal obligations, and capital projects.
+Strata is a **change-to-action workspace** that ingests regulatory proceedings and enterprise context, computes deterministic diffs, extracts verifiable citations, maps impacts to company assets via dense embeddings, and routes actionable tasks to owners under a living, event-sourced audit trail.
 
-Standard industry solutions fail this workflow: alert feeds and search engines detect *that* a filing occurred, but place the burden of full-text re-review, delta analysis, and impact assessment on human teams. The critical bottleneck is **interpretation, attribution, and actionability**:
-- Discerning exactly what changed between iterations down to the sentence and paragraph.
-- Differentiating between non-binding proposals (`DRAFT`/`PROPOSED`) and legally enforceable mandates (`FINAL`).
-- Mapping regulatory language to internal obligations, projects, and policies without loose semantic drift.
-- Producing auditable, citation-grade evidence that withstands regulatory scrutiny years later.
-
-Strata resolves this gap by providing an end-to-end, change-to-action workspace powered by deterministic text alignment, constrained LLM reasoning, verifiable dual-grounded citations, and an append-only event-sourced audit log.
-
----
-
-### 1.2 Core Design Principles
-
-These five core principles guide every architectural, data modeling, and pipeline design decision across Strata:
-
-1. **Citation-first, not summary-first.**
-   The system never generates a claim or summary and then scrambles to locate an after-the-fact citation. It retrieves and isolates verified textual spans first, bounds LLM reasoning strictly to those spans, and deterministically validates that all quoted passages exist verbatim in immutable source snapshots.
-2. **Deterministic diff, probabilistic interpretation.**
-   "What text changed" is computed strictly via deterministic algorithms (structural sequence alignment and paragraph hashing). LLMs are employed exclusively for interpretation: classifying materiality, extracting regulatory implications, and synthesizing plain-language impacts anchored to the deterministic diff.
-3. **Append-only state.**
-   Nothing in the regulatory, obligation, or project timeline is ever overwritten, updated in-place, or destructively edited. Corrections, re-interpretations, and human overrides are emitted as immutable new events layered chronologically on prior records.
-4. **Confidence gates action, not just display.**
-   A low-confidence interpretation cannot progress to a routed operational action. This constraint is structurally enforced by the workflow state machine rather than treated as an advisory UI badge. Ambiguous items route exclusively to an Expert Review Queue.
-5. **Everything addressable.**
-   Every ingested document—both external regulatory proceedings and internal corporate policies—is chunked into an immutable, addressable coordinate hierarchy (`doc_id → version_id → section_id → para_id → sentence_id → char_span`). Citations are permanently resolvable pointers, never free-text paraphrases.
+### 1.2 Non-Negotiable Engineering Principles
+1. **Citation-First, Not Summary-First**: Every claim (detected change, mapped impact, or recommended action) is anchored to an addressable character span verified deterministically against immutable snapshots before display.
+2. **Deterministic Diff, Probabilistic Interpretation**: Mechanical text deltas are calculated using sequence alignment algorithms (`difflib`/LCS). LLMs are employed exclusively for bounded interpretation: classifying materiality and extracting regulatory rationale.
+3. **Append-Only Living State**: No entity state or audit record is overwritten in place. Corrections, updates, and human overrides are emitted as new domain events layered chronologically over historical records.
+4. **Confidence Gates Action**: A transparent multi-signal rubric governs confidence. Low-confidence or ambiguous items are structurally blocked by the state machine from creating pending operational actions and route exclusively to an Expert Review Queue.
+5. **Canonical Addressability**: Ingested proceedings and internal documents are parsed into a uniform coordinate tree (`doc_id → version_id → section_id → para_id → sentence_id → char_span`). Citations are stable, resolvable pointers.
 
 ---
 
-### 1.3 MVP Scope & Non-Negotiable Requirements
+## 2. High-Level Architecture
 
-For the **MVP**, the system is intentionally architected to be **minimal, self-contained, and pragmatic**, stripping away unnecessary distributed infrastructure complexity (e.g., no distributed brokers like Kafka, no multi-tenant microservices) while retaining the non-negotiable core capabilities specified in `Strata_PRD.md`:
-
-1. **Citation-grade veracity**: Claims must point to verifiable paragraph/sentence spans checked by deterministic code.
-2. **Deterministic diffing**: Text changes are detected with standard algorithms; LLMs are used only for materiality and impact reasoning.
-3. **Draft vs. Final status gating**: Proceeding status gates action urgency (`DRAFT` = `MONITOR`, `FINAL` = `ACT_NOW` / `ACT_SOON`).
-4. **Relational + Audit Database**: A single unified database (SQLite / PostgreSQL) storing users, documents, projects, obligations, actions, and an append-only audit event log.
-5. **Open-Source Document Ingestion**: Ingesting PDF, HTML, and text via standard open-source libraries (`PyMuPDF`, `BeautifulSoup4`) with hierarchical section/paragraph chunking.
-6. **Embeddings for Regulatory Retrieval**: Dense semantic embeddings to identify candidate regulations and map impacts to internal company assets.
-7. **Human-in-the-Loop Escalation**: Ambiguous or low-confidence interpretations route to an Expert Review queue.
-
----
-
-## 2. High-Level System Architecture
-
-### 2.1 Functional Block Diagram
-
-```
-┌─────────────────┐     ┌──────────────────────┐     ┌───────────────────────┐
-│  Ingestion       │     │ Change Detection      │     │ Impact Mapping &        │
-│  Layer           │────▶│ & Classification       │────▶│ Action Recommendation  │
-│  (proceedings +  │     │ Pipeline               │     │ Engine                 │
-│  company context)│     │ (diff → LLM classify → │     │ (retrieval + LLM       │
-│                  │     │  citation validate)    │     │  match + citation      │
-└─────────────────┘     └──────────────────────┘     │  validate + routing)   │
-        │                          │                    └───────────┬────────────┘
-        ▼                          ▼                                ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Living Project State Store (append-only)             │
-│  Obligations · Projects · Documents · Change Records · Actions ·        │
-│  Confidence flags · Review decisions · Full audit event log             │
-└─────────────────────────────────────────────────────────────────────────┘
-        │                                                    │
-        ▼                                                    ▼
-┌─────────────────┐                                ┌───────────────────────┐
-│ Expert Review    │◀───────low-confidence──────────│ Reviewer Workspace UI  │
-│ Queue            │        escalation              │ (timelines, citations, │
-│                  │────────resolution feeds back───▶│  action inbox)         │
-└─────────────────┘                                └───────────────────────┘
-```
-
----
-
-### 2.2 System Component Topology
+### 2.1 Architecture Diagram
 
 ```mermaid
 flowchart TD
-    subgraph Ingestion["1. Open-Source Ingestion & Parsing"]
-        Files[Uploaded PDF / HTML / TXT Files] --> OSParser[Open-Source Parser: PyMuPDF / BS4]
-        OSParser --> ChunkEngine[Hierarchical Structurer: Sec → Para → Sentence]
-        ChunkEngine --> EmbedGen[Embedding Generator: Sentence-Transformers]
+    subgraph Ingestion["1. Ingestion & Normalization"]
+        Files[PDF / HTML / TXT Filings] --> Parser[Open-Source Parser: PyMuPDF / BS4]
+        Parser --> Segmenter[Hierarchical Segmenter: Sec → Para → Sent]
+        Segmenter --> MetaExtract[Status & Preamble Date Extractor]
     end
 
-    subgraph Storage["2. Minimal Database (SQLite / Postgres)"]
-        ChunkEngine --> DB[(Relational DB + Vector / Blob Storage)]
-        EmbedGen --> DB
+    subgraph Storage["2. Storage Layer (SQLite / PostgreSQL)"]
+        Segmenter --> DB[(Relational Tables & Snapshots)]
+        MetaExtract --> DB
+        EmbedGen[Sentence-Transformers Embeddings] --> DB
         
-        subgraph Tables["Core Tables"]
-            T1[users]
-            T2[proceedings & versions]
-            T3[documents & obligations & projects]
-            T4[change_records & impact_mappings]
-            T5[actions]
-            T6[audit_events: append-only]
+        subgraph CoreTables["Core Database Tables"]
+            users
+            proceedings & proceeding_versions
+            documents & obligations & projects
+            change_records & impact_mappings
+            actions
+            audit_events (append-only)
+            embeddings
         end
     end
 
-    subgraph Pipeline["3. Core Processing Pipeline"]
-        DB --> Diff[Deterministic Diff difflib/LCS]
-        Diff --> LLMClass[LLM Materiality Classifier]
-        LLMClass --> CiteVal[Deterministic Citation Validator]
+    subgraph Pipeline["3. Analysis & Processing Pipeline"]
+        DB --> Diff[Deterministic Diff Engine: difflib/LCS]
+        Diff --> StatusCheck[Status Transition Detector]
+        Diff --> Classify[LLM Materiality Classifier]
+        Classify --> Validator[Programmatic Citation Validator]
         
-        CiteVal --> VecSearch[Embedding Similarity Search top-k]
+        Validator --> VecSearch[Vector Embedding Search: Cosine Similarity]
         DB -.-> VecSearch
-        VecSearch --> LLMMatch[LLM Dual-Grounding Impact Matcher]
+        VecSearch --> Impact[Dual-Grounded Impact Matcher]
         
-        LLMMatch --> Rubric[Confidence Rubric Evaluator]
-        Rubric --> ActionGen[Action & Urgency Generator]
+        Impact --> Rubric[Confidence Rubric Evaluator]
+        Rubric --> ActionGen[Action Recommender & Ownership Resolver]
         ActionGen --> DB
     end
 
-    subgraph App["4. Minimal Web Workspace (FastAPI + React/Vite)"]
-        DB --> ReviewUI[Reviewer Inbox & Side-by-Side Diff]
-        DB --> ExpertUI[Expert Review Queue: Low-Confidence]
-        DB --> AuditUI[Living Entity Timeline & Audit View]
-        ReviewUI -- Human Decision --> DB
-        ExpertUI -- Resolution --> DB
+    subgraph Workspace["4. Operations Workspace (API & UI)"]
+        DB --> Inbox[Reviewer Action Inbox]
+        DB --> ExpertQueue[Expert Review Queue: Low-Confidence]
+        DB --> Timeline[Living Entity Timeline & Audit Dossier]
+        Inbox -- Accept / Modify / Override --> DB
+        ExpertQueue -- Resolve with Rationale --> DB
     end
 ```
 
----
+### 2.2 Subsystem Responsibilities
 
-## 3. Subsystem Detailed Design & Processing Pipeline
-
-### 3.1 Stage 1 — Open-Source Ingestion & Document Parser Subsystem
-
-To minimize operational complexity, the system replaces proprietary or commercial ingestion pipelines with battle-tested open-source libraries that extract clean, structured text from PDFs, HTML filings, and plain text.
-
-```mermaid
-flowchart LR
-    Upload[Raw Document: PDF / HTML / TXT] --> Extractor[Open-Source Text Extractor]
-    
-    subgraph Extractors["Extractor Implementations"]
-        PDF[PyMuPDF / fitz or pdfplumber]
-        HTML[BeautifulSoup4 / trafilatura]
-        TXT[Standard Text Normalizer]
-    end
-    
-    Extractor --> PDF
-    Extractor --> HTML
-    Extractor --> TXT
-    
-    PDF --> Seg[Hierarchical Section & Paragraph Segmenter]
-    HTML --> Seg
-    TXT --> Seg
-    
-    Seg --> Meta[Status & Preamble Date Extractor]
-    Seg --> DBRecord[Normalized Document Record + Snapshots]
-```
-
-#### Open-Source Extractors
-1. **PDF Documents (Docket filings, regulatory orders, agency releases)**:
-   - Utilizes `PyMuPDF` (`fitz`) or `pdfplumber` to extract page-by-page text blocks while preserving layout coordinates, section headers, and paragraph breaks.
-   - Strips running headers, footers, and page numbers to prevent spurious diff artifacts.
-2. **HTML Documents (Federal Register entries, state web dockets, e-filings)**:
-   - Utilizes `BeautifulSoup4` and `trafilatura` to clean DOM trees, extract body text, and convert `<h1>`-`<h6>` tags into structural section headings.
-3. **Plain Text / Markdown (Internal policies, SOPs, draft notes)**:
-   - Standard regex-based structural parser recognizing legal/regulatory numbering schemes (`Article I`, `Section 4.1`, `Part 201`, `§ 12.3`).
-
-#### Hierarchical Structural Chunking
-Every parsed document is decomposed into a referenceable JSON hierarchy:
-- **`Section`**: Heading title, section number, and identifier.
-- **`Paragraph`**: Discrete narrative block, indexed within the parent section.
-- **`Sentence`**: Segmented via rule-based sentence boundary detection.
-- **`char_span`**: Tuple `[start, end]` relative to the immutable raw text snapshot, ensuring exact character-level citation verification.
-
-#### Preamble Status & Metadata Extraction
-A constrained heuristic pass extracts:
-- `status`: `DRAFT` (NPRMs, draft staff papers), `PROPOSED` (proposed rules), `FINAL` (final orders, adopted rules), `WITHDRAWN`.
-- `filed_date`, `effective_date`, `comment_due_date`.
-- Extracted dates and status are cross-checked against explicit textual markers ("this Final Rule is effective...", "comments due by...") in the preamble before persisting.
+| Subsystem | Key Components | Core Responsibility |
+|---|---|---|
+| **Ingestion** | `DocumentExtractor`, `DocumentSegmenter`, `MetadataExtractor` | Extracts clean text from PDF/HTML, generates addressable hierarchy with character spans, and extracts status (`DRAFT`, `PROPOSED`, `FINAL`). |
+| **Storage** | `Database`, `StrataRepository`, `EventStore` | Manages relational tables in SQLite (`strata.db`) with foreign key constraints, plus an append-only event store. |
+| **Analysis Pipeline** | `DiffEngine`, `CitationValidator`, `ChangeClassifier` | Aligns paragraph sequences, validates verbatim quotations against snapshots, and classifies change types/materiality. |
+| **Impact & Routing** | `VectorStore`, `ImpactMapper`, `ConfidenceRubric`, `ActionRouter` | Uses dense embeddings to retrieve candidate enterprise assets, evaluates confidence signals, and deterministically resolves owners and urgency. |
+| **Living State & Audit** | `EventStore`, `StrataService` | Projects chronological entity timelines and generates exportable audit dossiers showing system claims alongside human decisions. |
 
 ---
 
-### 3.2 Stage 2 — Deterministic Diff & Change Detection Pipeline
+## 3. Data Pipeline & Subsystem Details
 
-Change detection cleanly separates mechanical delta computation from semantic interpretation (PRD **G1**, **G2**).
+### 3.1 Ingestion & Canonical Addressing
+- **Open-Source Text Extractors**:
+  - `PyMuPDF` (`fitz`): Page-by-page text block extraction for regulatory orders and dockets, stripping running headers/footers.
+  - `BeautifulSoup4`: DOM traversal and boilerplate removal for HTML filings (Federal Register, web dockets).
+  - Regex text normalizer for plain text and Markdown.
+- **Canonical Address Tree**:
+  - `Section`: Heading title and structural identifier (`sec_1`).
+  - `Paragraph`: Discrete narrative unit (`sec_1_p1`).
+  - `Sentence`: Boundary segmentation (`sec_1_p1_s1`).
+  - `char_span`: Absolute character offset tuple `[start, end]` into immutable raw text.
+- **Status Classification Pass**:
+  - Identifies `status` (`DRAFT`, `PROPOSED`, `FINAL`, `WITHDRAWN`) and filing/effective dates from preamble markers.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant D as Diff Engine
-    participant LLM as LLM Materiality Classifier
-    participant V as Programmatic Citation Validator
-    participant DB as SQLite / Postgres DB
+### 3.2 Change Detection & Status Transition
+1. **Paragraph Sequence Alignment**:
+   - Uses `difflib.SequenceMatcher` over paragraph token streams between `ProceedingVersion(n-1)` and `ProceedingVersion(n)`.
+   - Produces discrete change deltas: `ADDED`, `MODIFIED`, or `REMOVED`.
+2. **Materiality & Change Classification**:
+   - Evaluates whether the diff represents a substantive shift: `NEW_REQUIREMENT`, `DEADLINE_SHIFT`, `SCOPE_CHANGE`, `REQUIREMENT_REMOVED`, or `DEFINITION_CHANGE`. Non-substantive formatting edits are marked `IMMATERIAL`.
+3. **Programmatic Citation Validation**:
+   - Code check asserts that claimed `quoted_text` is an exact (or normalized-whitespace) substring of the referenced paragraph.
+   - **Fail-Safe Gate**: Failed citations are not discarded; they are demoted to `confidence = LOW` (`SIG_CITE_FAIL`) and enqueued for Expert Review.
+4. **Status Transition Detection**:
+   - Any shift in proceeding status (e.g., `PROPOSED → FINAL`) immediately emits a high-salience `STATUS_TRANSITION` change record.
 
-    D->>D: Sequence align paragraphs v(n-1) vs v(n) (difflib)
-    D->>LLM: Pass delta pairs (Added / Modified / Removed)
-    LLM-->>V: Return ChangeRecord with candidate quoted spans
-    V->>V: String-match quoted_text against immutable snapshots
-    alt Citation Validated
-        V->>DB: Save ChangeRecord (HIGH/MEDIUM Confidence)
-    else Validation Failed
-        V->>V: Demote confidence to LOW ('Citation Mismatch')
-        V->>DB: Save ChangeRecord (Flagged for Expert Review)
-    end
-```
+### 3.3 Semantic Retrieval & Dual-Grounded Impact Mapping
+1. **Embedding Search**:
+   - Dense embeddings (`sentence-transformers/all-MiniLM-L6-v2`, 384 dimensions) represent company obligations, projects, and internal policy sections.
+   - The query vector is formed from `ChangeRecord.description + "\n" + after_citation.quoted_text`.
+   - Cosine similarity retrieves top-$k$ candidate assets (excluding external proceeding text).
+2. **Dual-Citation Grounding**:
+   - Every confirmed mapping must carry verifiable citations on both sides:
+     - `change_citation`: Specific quoted span from the regulatory proceeding.
+     - `affected_citation`: Verbatim quoted span from the internal obligation, project scope, or document.
+3. **Many-to-Many Propagation**:
+   - If an internal document (e.g., SOP or permit) is impacted, all compliance obligations linked to that document are automatically linked.
 
-#### Step 1: Deterministic Paragraph Sequence Alignment
-- Structural sequence alignment (Longest Common Subsequence over tokenized paragraph hashes) aligns `ProceedingVersion(n-1)` with `ProceedingVersion(n)`.
-- Eliminates noise caused by line wrapping, formatting changes, or re-pagination.
-- Produces discrete delta tuples: `(DIFF_TYPE: ADDED | MODIFIED | REMOVED, prev_para_ref, curr_para_ref)`.
+### 3.4 Action Routing & Urgency Business Logic
+1. **Deterministic Ownership Resolution**:
+   - The model recommends *what* action to take; the system deterministically looks up *who* owns the affected asset via `owner_id`.
+2. **Deterministic Urgency Rules**:
+   - `status == DRAFT` or `PROPOSED` → Urgency capped at `MONITOR`.
+   - `status == FINAL` → Urgency set to `ACT_NOW` (or `ACT_SOON` if deadline $> 90$ days).
+   - `STATUS_TRANSITION` to `FINAL` → Urgency set to `ACT_NOW`.
+3. **Action Lifecycle States**:
+   - `PENDING` → `ACCEPTED` | `MODIFIED` | `REJECTED` | `DONE`.
 
-#### Step 2: Constrained LLM Materiality Classification
-- The LLM is fed **only** the modified delta pairs with immediate heading context. It never processes entire documents at large to discover differences.
-- Prompt enforces strict JSON Schema output conforming to `ChangeRecord`:
-  - `change_type`: `NEW_REQUIREMENT`, `DEADLINE_SHIFT`, `SCOPE_CHANGE`, `REQUIREMENT_REMOVED`, `DEFINITION_CHANGE`, `STATUS_TRANSITION`, `OTHER`.
-  - `materiality`: `MATERIAL` (triggers impact mapping) vs `IMMATERIAL` (logged, excluded from downstream action routing).
-  - `description`: Plain-language synthesis of the substantive delta.
-  - `before_citation` / `after_citation`: Quoted strings referencing specific paragraph coordinates.
+### 3.5 Confidence Rubric & Expert Review Gating
+Confidence is evaluated against an auditable, multi-signal rules engine:
 
-#### Step 3: Programmatic Citation Validator (Non-LLM Gate)
-- Independent Python verification module.
-- Directly retrieves text at `(version_id, section_id, para_id)` from the immutable snapshot.
-- Asserts that `quoted_text` is an exact (or whitespace-normalized) substring of the referenced text.
-- **Fail-Safe Behavior**: If the quoted text does not verify, the record is **not** discarded. It is marked `confidence = LOW` with diagnostic rationale (`"Citation span verification failed against source snapshot"`) and routed to the Expert Review Queue.
-
-#### Step 4: Status Transition Detection
-- An independent state-machine evaluator checks `prev_version.status` vs `curr_version.status`.
-- A transition (e.g., `PROPOSED → FINAL`) creates an independent `STATUS_TRANSITION` `ChangeRecord`.
-- Emitted with maximum salience because it alters the legal bindingness of all existing obligations under that proceeding.
-
----
-
-### 3.3 Stage 3 — Embedding-Based Regulatory Identification & Impact Mapping
-
-Dense semantic embeddings solve two critical matching challenges:
-1. **Identifying Relevant Regulations**: Quickly surfacing which proceedings or dockets apply to specific business functions, projects, or compliance areas.
-2. **Impact Mapping**: Narrowing the entire enterprise corpus (hundreds of policy sections and obligations) down to the top-$k$ candidates for a detected change.
-
-```mermaid
-flowchart TD
-    Change[Detected Material Change] --> EmbedQuery[Generate Embedding for: Description + Quoted Passage]
-    
-    subgraph VectorSearch["Embedding Similarity Search (Cosine / sqlite-vec)"]
-        EmbedQuery --> CosineSim[Cosine Similarity Matcher]
-        DBEmbeds[(Pre-Computed Embeddings: Obligations, Docs, Projects)] --> CosineSim
-        CosineSim --> TopK[Top-K Candidate Context Assets k=5 to 8]
-    end
-    
-    TopK --> LLMMatch[LLM Dual-Grounding Reasoner]
-    LLMMatch --> ValidateImpact[Deterministic Substring Citation Check]
-    ValidateImpact --> ConfScore[Confidence Rubric Evaluation]
-    ConfScore --> ValidMapping[Persist ImpactMapping to DB]
-```
-
-#### Step 1: Embedding Model & Generation
-- **Model Choice**: Lightweight, open-source local model (`sentence-transformers/all-MiniLM-L6-v2`, 384 dimensions) or hosted embedding API (`text-embedding-3-small`, 1536 dimensions).
-- **Embedded Units**:
-  - Internal Policies & Procedures: Embedded at the **Paragraph** level with Section title context prefixed.
-  - Internal Obligations: Embedded using obligation title + substantive description.
-  - Projects: Embedded using project name + scope description + milestone titles.
-- **Storage**: Stored directly in the `embeddings` table within SQLite (via BLOB or `sqlite-vec`) or computed in-memory via NumPy for the MVP dataset.
-
-#### Step 2: Vector Search & Candidate Retrieval
-- For each `MATERIAL` change, an embedding vector is generated from `ChangeRecord.description + "\n" + after_citation.quoted_text`.
-- Cosine similarity ranking retrieves the top-$k$ ($k=5$ to $8$) most semantically proximate company assets.
-- Threshold filtering rejects low-similarity noise before invoking the LLM.
-
-#### Step 3: LLM Dual-Grounding Matching Contract
-The LLM evaluates each candidate against the change record under a strict verification contract:
-1. It must determine whether an actual operational, legal, or procedural dependency exists.
-2. It must extract an exact verbatim quote from the **internal enterprise asset** (`affected_side_citation`).
-3. It must articulate a direct rationale explaining why the regulatory quote impacts the internal quote.
-4. If it cannot quote an exact grounding span in the company asset, the candidate is discarded. "Thematic relevance" without textual grounding is rejected.
-
-#### Step 4: Programmatic Affected-Side Validation
-- The internal asset quotation is validated against the document snapshot using the deterministic substring checker before the mapping is finalized.
-
----
-
-### 3.4 Stage 4 — Action Recommendation, Urgency Logic & Routing
-
-Translating intelligence into an auditable task (PRD **G5**, **FR5**).
-
-```mermaid
-flowchart TD
-    Mapping[Validated ImpactMapping] --> ConfCheck{Confidence Level?}
-    ConfCheck -- LOW --> ExpQueue[Expert Review Queue]
-    ConfCheck -- HIGH / MEDIUM --> ActionGen[LLM Recommends Concrete Action]
-    
-    ActionGen --> OwnerLookup[Deterministic Owner Lookup]
-    OwnerLookup --> UrgencyLogic[Deterministic Urgency Rules Engine]
-    UrgencyLogic --> ActionRecord[Create ActionRecord State: PENDING]
-    ActionRecord --> Inbox[Target Owner Action Inbox]
-```
-
-#### Step 1: Deterministic Ownership Resolution
-- The LLM recommends *what* action needs to be taken (e.g., *"Amend Section 4.2 of Data Retention Policy to reflect 7-year storage for customer logs"*).
-- The LLM does **not** determine *who* owns the action.
-- The system deterministically resolves `suggested_owner` by looking up the assigned owner in the target `Obligation`, `Project`, or `Document` metadata. This prevents hallucinated or misdirected routing.
-
-#### Step 2: Deterministic Urgency Matrix
-To prevent LLM urgency drift, hard business rules gate urgency based on proceeding status and explicit timelines:
-
-| Proceeding Status | Explicit Deadline Found? | Computed Urgency | Rationale / Behavior |
+| Signal | Condition | Confidence Effect | System Action |
 |---|---|---|---|
-| `DRAFT` / `PROPOSED` | Any | `MONITOR` | Non-binding. Urgency capped. Informs planning without triggering premature operational changes. |
-| `FINAL` | $> 90$ days | `ACT_SOON` | Binding order. Operational lead time available. |
-| `FINAL` | $\le 90$ days or No Date Stated | `ACT_NOW` | Immediate compliance exposure. Prioritized in review inbox. |
-| Any (`STATUS_TRANSITION`) | N/A | `ACT_NOW` | Docket transition to FINAL triggers immediate operational mobilization. |
+| `SIG_CITE_FAIL` | Quoted span failed programmatic substring verification | Force `LOW` | Enqueue in Expert Review Queue |
+| `SIG_AMBIG_TERM` | Undefined statutory phrasing detected (e.g., *"ancillary emergency asset"*) | Force `LOW` | Enqueue in Expert Review Queue |
+| `SIG_RANK_TIE` | Top candidate enterprise assets score within 3% retrieval margin | Cap at `MEDIUM` | Advisory flag in Reviewer Inbox |
+| `SIG_HIGH_STAKES` | Change alters statutory deadlines, civil penalties, or applicability scope | Cap at `MEDIUM` | Heightened Review Flag |
+| `SIG_CLEAN_GROUND`| Citations verified, single distinct match, unambiguous legal text | Eligible for `HIGH` | Standard Action Inbox |
 
-#### Step 3: Action Lifecycle State Machine
-Every recommended action is governed by an append-only state machine:
-- `PENDING`: Awaiting owner/reviewer evaluation.
-- `ACCEPTED`: Reviewer confirmed recommended action without edits.
-- `MODIFIED`: Reviewer modified scope, action description, or reassigned owner (original recommendation preserved in event history).
-- `REJECTED`: Reviewer dismissed recommendation with mandatory recorded rationale.
-- `DONE`: Action implemented and verified.
+- **Structural Blocking**: Low-confidence items are structurally blocked from generating actionable operational tasks until resolved by an expert reviewer with recorded rationale.
 
 ---
 
-### 3.5 Stage 5 — Transparent Confidence Scoring & Escalation Architecture
+## 4. Data Model & Database Architecture
 
-Trust is the product: a confidently wrong compliance interpretation is far worse than an honest *"needs human review"* (PRD **G7**).
+### 4.1 Canonical Data Schema
 
-```mermaid
-flowchart TD
-    Input[Candidate Record: Change / Mapping / Action] --> R1{Citations Validated?}
-    R1 -- No --> ForceLow[Force LOW Confidence]
-    R1 -- Yes --> R2{Undefined Terms or Ambiguity Flagged?}
-    R2 -- Yes --> ForceLow
-    R2 -- No --> R3{Close Candidate Mapping Score Tie?}
-    R3 -- Yes --> CapMed[Cap at MEDIUM Confidence]
-    R3 -- No --> R4{Touches Deadlines, Scope, or Penalties?}
-    R4 -- Yes --> CapMed
-    R4 -- No --> High[Assign HIGH Confidence]
-    
-    ForceLow --> RouteExpert[Structural Route to Expert Review Queue]
-    CapMed --> AllowRoute[Allow Action Routing with Advisory Flag]
-    High --> AllowRoute
+```
+Proceeding (id, docket_id, title, jurisdiction)
+ └── ProceedingVersion (id, proceeding_id, version_label, status, filed_date, effective_date, raw_text)
+      └── Section (section_id, heading)
+           └── Paragraph (para_id, text)
+                └── Sentence (sentence_id, text, char_span: [start, end])
+
+CompanyContext:
+ ├── User (id, name, email, role: REVIEWER | ASSIGNEE | LEAD | ADMIN)
+ ├── Document (id, title, doc_type: POLICY | PROCEDURE | CONTRACT | FILING, owner_id, raw_text, sections)
+ ├── Obligation (id, description, owner_id, status: ACTIVE | SUPERSEDED | CLOSED, linked_doc_id)
+ └── Project (id, name, description, owner_id, status, linked_obligations, milestones)
+
+Analysis & Living State:
+ ├── ChangeRecord (id, proceeding_id, from_version_id, to_version_id, change_type, materiality, description, before_citation, after_citation, confidence, confidence_signals)
+ ├── ImpactMapping (id, change_id, affected_type: OBLIGATION | PROJECT | DOCUMENT, affected_id, rationale, change_citation, affected_citation, confidence)
+ ├── ActionRecommendation (id, mapping_id, recommended_action, suggested_owner_id, urgency: MONITOR | ACT_SOON | ACT_NOW, state: PENDING | ACCEPTED | MODIFIED | REJECTED | DONE)
+ └── AuditEvent (id, stream_id, event_type, actor_type: SYSTEM | USER, actor_id, payload, linked_citations, timestamp)
 ```
 
-#### Deterministic Confidence Rubric
-Confidence is evaluated transparently via an auditable rules engine rather than an opaque floating-point score:
-
-| Rubric Signal | Trigger Condition | System Action | Target State |
-|---|---|---|---|
-| `SIG_CITE_FAIL` | `quoted_text` failed substring verification on either regulatory or company side | Demote to `LOW` | Expert Review Queue |
-| `SIG_AMBIG_TERM` | LLM identifies undefined key statutory terms (e.g., *"covered utility"*, *"material disruption"*) | Demote to `LOW` | Expert Review Queue |
-| `SIG_RANK_TIE` | Top two candidate enterprise assets score within 5% retrieval margin | Cap at `MEDIUM` | Flagged in Reviewer Inbox |
-| `SIG_HIGH_STAKES` | Language introduces or alters civil penalties, criminal liability, or immediate filing deadlines | Cap at `MEDIUM` | Heightened Review Flag |
-| `SIG_CLEAN_GROUND` | Citations verified, single distinct match, unambiguous phrasing, clear obligations | Eligible for `HIGH` | Standard Action Inbox |
-
-#### Expert Review Queue Mechanics
-- Records evaluated at `LOW` are **structurally prevented** from creating pending operational actions.
-- Enqueued into the **Expert Review Queue** with a complete evidence bundle: paired citations, model hypothesis, retrieval scores, and the exact rubric signal that triggered escalation.
-- Resolving an item requires human review:
-  - `CONFIRM`: Human validates the interpretation.
-  - `CORRECT`: Human supplies corrected citations or mapping.
-  - `DISMISS`: Human marks change as inapplicable.
-- All resolutions append an `AuditEvent` preserving both the original system hypothesis and the human determination.
-
----
-
-## 4. Algorithmic Implementations & Key Pseudocode Interfaces
-
-The core orchestrator interfaces enforce the strict separation between deterministic code gates and probabilistic LLM generation:
-
-```python
-def detect_changes(prev_version: ProceedingVersion, curr_version: ProceedingVersion) -> list[ChangeRecord]:
-    """
-    Computes structural diff between versions, invokes schema-constrained
-    LLM classification, and applies deterministic citation verification.
-    """
-    diff_pairs = structural_diff(prev_version.sections, curr_version.sections)
-    records = []
-    
-    for pair in diff_pairs:
-        # Schema-constrained LLM call bounded strictly to the modified pair
-        candidate = llm_classify_change(pair)
-        
-        # Programmatic coordinate binding (not re-typed by model)
-        candidate = bind_citations(candidate, pair)
-        
-        # Non-LLM gate: verify quoted string exists verbatim in snapshot
-        candidate = validate_citations(candidate)
-        records.append(candidate)
-        
-    # State-machine check: emit STATUS_TRANSITION if bindingness changed
-    if prev_version.status != curr_version.status:
-        records.append(make_status_transition_record(prev_version, curr_version))
-        
-    return records
-
-
-def map_impact(change: ChangeRecord, context: CompanyContext) -> list[ImpactMapping]:
-    """
-    Retrieves candidate internal assets via vector search, enforces dual-grounded
-    quotations, and evaluates the confidence rubric.
-    """
-    # Hybrid search over obligations, projects, and documents
-    candidates = hybrid_retrieve(change, context, top_k=8)
-    mappings = []
-    
-    for cand in candidates:
-        # LLM must produce rationale AND verbatim quote from candidate asset
-        result = llm_match(change, cand)
-        if result.accepted:
-            # Deterministic validation of internal asset citation
-            m = bind_and_validate_mapping(change, cand, result)
-            m.confidence, m.confidence_signals = score_confidence_rubric(m)
-            mappings.append(m)
-            
-    return mappings
-
-
-def recommend_action(mapping: ImpactMapping, proceeding_status: ProceedingStatus) -> ActionRecommendation | None:
-    """
-    Generates recommended action for High/Medium confidence mappings.
-    Routes Low confidence items directly to Expert Review.
-    """
-    if mapping.confidence == "LOW":
-        enqueue_expert_review(mapping)
-        return None
-        
-    # LLM recommends WHAT action to take
-    action = llm_recommend_action(mapping)
-    
-    # System deterministically resolves WHO owns it from asset metadata
-    action.suggested_owner = lookup_owner(mapping.affected_id)
-    
-    # Business rules enforce urgency based on proceeding status & deadlines
-    action.urgency = apply_urgency_rules(action, proceeding_status)
-    
-    # Persist in state PENDING and dispatch to owner inbox
-    persist_action(action, state="PENDING")
-    return action
-```
-
----
-
-## 5. Canonical Data Model & Storage Specifications
-
-### 5.1 Relational Database DDL (SQLite / PostgreSQL Compatible)
-
-A single relational database stores all normalized entities with foreign key integrity and a dedicated append-only audit table:
+### 4.2 Relational Database Schema (SQLite DDL)
 
 ```sql
--- 1. Users & Roles
+-- Core Relational Tables
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -458,7 +186,6 @@ CREATE TABLE users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Regulatory Proceedings & Immutable Versions
 CREATE TABLE proceedings (
     id TEXT PRIMARY KEY,
     docket_id TEXT UNIQUE NOT NULL,
@@ -470,17 +197,16 @@ CREATE TABLE proceedings (
 CREATE TABLE proceeding_versions (
     id TEXT PRIMARY KEY,
     proceeding_id TEXT NOT NULL REFERENCES proceedings(id) ON DELETE CASCADE,
-    version_label TEXT NOT NULL, -- e.g. "NPRM", "Revised Draft", "Final Order"
+    version_label TEXT NOT NULL,
     status TEXT CHECK(status IN ('DRAFT', 'PROPOSED', 'FINAL', 'WITHDRAWN')) NOT NULL,
     filed_date DATE NOT NULL,
     effective_date DATE,
     comment_due_date DATE,
     raw_text TEXT NOT NULL,
-    parsed_sections_json JSON NOT NULL, -- Section -> Paragraph -> Sentence hierarchy
+    parsed_sections_json TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Governing Internal Documents (Policies, SOPs, Contracts)
 CREATE TABLE documents (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -488,29 +214,27 @@ CREATE TABLE documents (
     owner_id TEXT NOT NULL REFERENCES users(id),
     current_version INTEGER DEFAULT 1,
     raw_text TEXT NOT NULL,
-    parsed_sections_json JSON NOT NULL,
+    parsed_sections_json TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Company Obligations
 CREATE TABLE obligations (
     id TEXT PRIMARY KEY,
     description TEXT NOT NULL,
     owner_id TEXT NOT NULL REFERENCES users(id),
     status TEXT CHECK(status IN ('ACTIVE', 'SUPERSEDED', 'CLOSED')) DEFAULT 'ACTIVE',
     linked_doc_id TEXT REFERENCES documents(id),
-    source_citation_json JSON, -- Optional initial regulatory basis
+    source_citation_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 5. Company Projects & Workstreams
 CREATE TABLE projects (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     owner_id TEXT NOT NULL REFERENCES users(id),
     status TEXT CHECK(status IN ('ACTIVE', 'COMPLETED', 'ON_HOLD')) DEFAULT 'ACTIVE',
-    milestones_json JSON,
+    milestones_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -520,40 +244,35 @@ CREATE TABLE project_obligations (
     PRIMARY KEY (project_id, obligation_id)
 );
 
--- 6. Analytical Change Records
 CREATE TABLE change_records (
     id TEXT PRIMARY KEY,
     proceeding_id TEXT NOT NULL REFERENCES proceedings(id),
     from_version_id TEXT REFERENCES proceeding_versions(id),
     to_version_id TEXT NOT NULL REFERENCES proceeding_versions(id),
-    change_type TEXT CHECK(change_type IN (
-        'NEW_REQUIREMENT', 'DEADLINE_SHIFT', 'SCOPE_CHANGE',
-        'REQUIREMENT_REMOVED', 'DEFINITION_CHANGE', 'STATUS_TRANSITION', 'OTHER'
-    )) NOT NULL,
+    change_type TEXT NOT NULL,
     materiality TEXT CHECK(materiality IN ('MATERIAL', 'IMMATERIAL')) NOT NULL,
     description TEXT NOT NULL,
-    before_citation_json JSON, -- {version_id, locator, quoted_text}
-    after_citation_json JSON,
+    before_citation_json TEXT,
+    after_citation_json TEXT,
     confidence TEXT CHECK(confidence IN ('HIGH', 'MEDIUM', 'LOW')) NOT NULL,
-    confidence_signals_json JSON,
+    confidence_signals_json TEXT,
     confidence_rationale TEXT,
     detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. Impact Mappings (Change -> Enterprise Asset)
 CREATE TABLE impact_mappings (
     id TEXT PRIMARY KEY,
     change_id TEXT NOT NULL REFERENCES change_records(id) ON DELETE CASCADE,
     affected_type TEXT CHECK(affected_type IN ('OBLIGATION', 'PROJECT', 'DOCUMENT')) NOT NULL,
     affected_id TEXT NOT NULL,
     rationale TEXT NOT NULL,
-    change_citation_json JSON NOT NULL,
-    affected_citation_json JSON NOT NULL,
+    change_citation_json TEXT NOT NULL,
+    affected_citation_json TEXT NOT NULL,
     confidence TEXT CHECK(confidence IN ('HIGH', 'MEDIUM', 'LOW')) NOT NULL,
+    confidence_signals_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. Action Recommendations & State Tracking
 CREATE TABLE actions (
     id TEXT PRIMARY KEY,
     mapping_id TEXT NOT NULL REFERENCES impact_mappings(id) ON DELETE CASCADE,
@@ -565,495 +284,182 @@ CREATE TABLE actions (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Append-Only Audit Event Log
+-- Append-Only Event Store Table
 CREATE TABLE audit_events (
-    id TEXT PRIMARY KEY, -- UUIDv7
-    stream_id TEXT NOT NULL, -- e.g. "obligation:OBL-01", "proceeding:FERC-01"
+    id TEXT PRIMARY KEY,
+    stream_id TEXT NOT NULL,
     event_type TEXT NOT NULL,
     actor_type TEXT CHECK(actor_type IN ('SYSTEM', 'USER')) NOT NULL,
     actor_id TEXT NOT NULL,
-    payload_json JSON NOT NULL,
-    linked_citations_json JSON,
+    payload_json TEXT NOT NULL,
+    linked_citations_json TEXT,
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Semantic Vector Embeddings Store
+-- Vector Embeddings Table
 CREATE TABLE embeddings (
     id TEXT PRIMARY KEY,
     entity_type TEXT CHECK(entity_type IN ('PROCEEDING_PARA', 'DOC_PARA', 'OBLIGATION', 'PROJECT')) NOT NULL,
     entity_id TEXT NOT NULL,
-    chunk_id TEXT NOT NULL, -- e.g. "sec_3/p_02"
+    chunk_id TEXT NOT NULL,
     chunk_text TEXT NOT NULL,
-    embedding_blob BLOB NOT NULL -- Packed float32 array or sqlite-vec virtual table
+    embedding_blob BLOB NOT NULL
 );
 ```
 
----
-
-### 5.2 TypeScript / Canonical Interfaces
-
-```typescript
-// --- Canonical Addressing & Citations ---
-export interface CharSpan {
-  start: number; // 0-indexed character offset
-  end: number;
-}
-
-export interface Sentence {
-  sentence_id: string; // e.g. "s_04"
-  text: string;
-  char_span: CharSpan;
-}
-
-export interface Paragraph {
-  para_id: string; // e.g. "p_02"
-  sentences: Sentence[];
-  text: string;
-}
-
-export interface Section {
-  section_id: string; // e.g. "sec_3_a"
-  heading: string;
-  paragraphs: Paragraph[];
-}
-
-export interface Citation {
-  document_id: string; // Proceeding ID or Company Document ID
-  version_id: string;
-  section_id: string;
-  para_id: string;
-  sentence_ids: string[];
-  quoted_text: string; // Exact substring verified by code
-}
-
-// --- Regulatory Proceedings ---
-export type ProceedingStatus = 'DRAFT' | 'PROPOSED' | 'FINAL' | 'WITHDRAWN';
-
-export interface ProceedingVersion {
-  version_id: string;
-  proceeding_id: string;
-  version_label: string; // "NPRM", "Revised Draft", "Final Order"
-  status: ProceedingStatus;
-  filed_date: string; // ISO 8601 YYYY-MM-DD
-  effective_date: string | null;
-  comment_due_date: string | null;
-  raw_text: string;
-  sections: Section[];
-  ingested_at: string; // ISO 8601 UTC
-  immutable: true;
-}
-
-// --- Company Context ---
-export type ObligationStatus = 'ACTIVE' | 'SUPERSEDED' | 'CLOSED';
-export type DocumentType = 'POLICY' | 'PROCEDURE' | 'CONTRACT' | 'FILING';
-
-export interface Obligation {
-  obligation_id: string;
-  description: string;
-  source_citation: Citation | null;
-  owner: string; // Role or user ID
-  status: ObligationStatus;
-  linked_documents: string[]; // document_ids
-  linked_projects: string[]; // project_ids
-}
-
-export interface ProjectMilestone {
-  milestone_id: string;
-  name: string;
-  due_date: string;
-  status: 'PLANNED' | 'IN_PROGRESS' | 'COMPLETED' | 'AT_RISK';
-}
-
-export interface Project {
-  project_id: string;
-  name: string;
-  description: string;
-  owner: string;
-  linked_obligations: string[];
-  milestones: ProjectMilestone[];
-}
-
-export interface InternalDocument {
-  document_id: string;
-  title: string;
-  type: DocumentType;
-  owner: string;
-  current_version: number;
-  sections: Section[];
-}
-
-// --- Analytical Records ---
-export type ChangeType =
-  | 'NEW_REQUIREMENT'
-  | 'DEADLINE_SHIFT'
-  | 'SCOPE_CHANGE'
-  | 'REQUIREMENT_REMOVED'
-  | 'DEFINITION_CHANGE'
-  | 'STATUS_TRANSITION'
-  | 'OTHER';
-
-export type Materiality = 'MATERIAL' | 'IMMATERIAL';
-export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
-
-export interface ChangeRecord {
-  change_id: string;
-  proceeding_id: string;
-  from_version_id: string | null; // null if initial version
-  to_version_id: string;
-  change_type: ChangeType;
-  materiality: Materiality;
-  description: string;
-  before_citation: Citation | null;
-  after_citation: Citation | null;
-  confidence: ConfidenceTier;
-  confidence_signals: string[];
-  confidence_rationale: string;
-  detected_at: string;
-}
-
-export interface ImpactMapping {
-  mapping_id: string;
-  change_id: string;
-  affected_type: 'OBLIGATION' | 'PROJECT' | 'DOCUMENT';
-  affected_id: string;
-  rationale: string;
-  change_side_citation: Citation;
-  affected_side_citation: Citation;
-  confidence: ConfidenceTier;
-  confidence_signals: string[];
-}
-
-export type ActionUrgency = 'MONITOR' | 'ACT_SOON' | 'ACT_NOW';
-export type ActionState = 'PENDING' | 'ACCEPTED' | 'MODIFIED' | 'REJECTED' | 'DONE';
-
-export interface ActionRecommendation {
-  action_id: string;
-  mapping_id: string;
-  recommended_action: string;
-  suggested_owner: string;
-  urgency: ActionUrgency;
-  state: ActionState;
-  created_at: string;
-}
-```
+### 4.3 Append-Only Event Sourcing
+- Every analytical determination, state transition, and human override emits an immutable `AuditEvent`:
+  - `PROCEEDING_VERSION_INGESTED`
+  - `DOCUMENT_INGESTED`
+  - `CHANGE_DETECTED`
+  - `STATUS_TRANSITION_DETECTED`
+  - `IMPACT_MAPPED`
+  - `ACTION_RECOMMENDED`
+  - `ACTION_ESCALATED_TO_EXPERT`
+  - `EXPERT_REVIEW_RESOLVED`
+  - `ACTION_STATE_CHANGED`
+  - `HUMAN_OVERRIDE_RECORDED`
+- Read models (Reviewer Inbox, Expert Review Queue, Entity Living Timelines) are projections folded from this append-only stream.
 
 ---
 
-### 5.3 Append-Only Event Store & Event Schema
+## 5. Core Interfaces & Execution Flow
 
-All domain mutations are represented as immutable, timestamped domain events:
-
-```typescript
-export interface AuditEvent {
-  event_id: string; // UUIDv7 (time-sortable)
-  stream_id: string; // e.g. "obligation:OBL-102" or "proceeding:DOCK-89"
-  revision: number; // Monotonically increasing sequence per stream
-  timestamp: string; // ISO 8601 UTC
-  actor: {
-    type: 'SYSTEM' | 'USER';
-    id: string; // "pipeline:change_detector" or "user:m.chen@enterprise.com"
-  };
-  event_type:
-    | 'PROCEEDING_VERSION_INGESTED'
-    | 'CHANGE_DETECTED'
-    | 'STATUS_TRANSITION_DETECTED'
-    | 'IMPACT_MAPPED'
-    | 'ACTION_RECOMMENDED'
-    | 'ACTION_ESCALATED_TO_EXPERT'
-    | 'EXPERT_REVIEW_RESOLVED'
-    | 'ACTION_STATE_CHANGED'
-    | 'HUMAN_OVERRIDE_RECORDED';
-  payload: Record<string, any>;
-  linked_citations: Citation[];
-}
-```
-
-#### Event Sourcing & CQRS Projections
-- **Command Path**: Handlers emit validated `AuditEvent` instances and append them directly to the immutable database table. No in-place updates are permitted.
-- **Query Path (Projections)**: Asynchronous and in-line projection handlers fold events into materialized views:
-  - `EntityTimelineView(entity_id)`: Folds all events for an obligation, project, or document into a chronological timeline.
-  - `ReviewerInboxView(user_id)`: Queries active `ActionRecommendation` records in state `PENDING` where `suggested_owner == user_id`.
-  - `ExpertReviewQueueView`: Queries unassigned or unconfirmed items with `confidence == LOW`.
-
----
-
-## 6. End-to-End System Sequence Flows
-
-### 6.1 End-to-End Pipeline: Ingest to Action
+### 5.1 End-to-End Pipeline Sequence
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Admin as Regulatory Analyst
-    participant Ingest as Ingestion Engine
-    participant Snap as Snapshot Store
-    participant Pipeline as Diff & Analysis Pipeline
-    participant Rubric as Confidence Rubric
-    participant ES as Event Store
-    participant Inbox as Owner Inbox
+    actor Reviewer as Compliance Analyst
+    participant Svc as StrataService
+    participant Diff as DiffEngine
+    participant Class as ChangeClassifier
+    participant Val as CitationValidator
+    participant Map as ImpactMapper
+    participant ES as EventStore
+    participant Inbox as Action Inbox
 
-    Admin->>Ingest: Ingest Proceeding v2 (Final Rule)
-    Ingest->>Snap: Store immutable text & canonical parsed sections
-    Ingest->>ES: Append PROCEEDING_VERSION_INGESTED
+    Reviewer->>Svc: Ingest Proceeding v(n) (Final Rule)
+    Svc->>ES: Append PROCEEDING_VERSION_INGESTED
+    Svc->>Diff: align_and_diff(v(n-1), v(n))
+    Diff-->>Svc: Delta Paragraph Pairs
+    Svc->>Class: classify_diff_pair(delta)
+    Class-->>Svc: ChangeRecord
+    Svc->>Val: validate_citation(ChangeRecord.citations)
+    alt Citation Validated
+        Val-->>Svc: Valid
+    else Citation Failed
+        Val-->>Svc: Force LOW Confidence (SIG_CITE_FAIL)
+    end
+    Svc->>Map: map_change_impact(ChangeRecord, CompanyContext)
+    Map-->>Svc: List[ImpactMapping] with dual citations
     
-    Ingest->>Pipeline: Trigger analysis against v1 (Draft)
-    Pipeline->>Pipeline: Structural diff v1 vs v2
-    Pipeline->>Pipeline: LLM classifies materiality & binds citations
-    Pipeline->>Pipeline: Deterministic citation validation
-    Pipeline->>Pipeline: Hybrid retrieve candidate company obligations
-    Pipeline->>Pipeline: LLM matches obligation & extracts affected quote
-    Pipeline->>Pipeline: Deterministic affected citation validation
-    
-    Pipeline->>Rubric: Evaluate confidence signals
-    alt Confidence is HIGH / MEDIUM
-        Rubric->>Pipeline: Approved for Action Routing
-        Pipeline->>Pipeline: Apply deterministic urgency (Status=FINAL -> ACT_NOW)
-        Pipeline->>Pipeline: Resolve owner from Obligation metadata
-        Pipeline->>ES: Append CHANGE_DETECTED, IMPACT_MAPPED, ACTION_RECOMMENDED
-        ES->>Inbox: Update Owner Action Inbox (PENDING)
+    alt Confidence is HIGH or MEDIUM
+        Svc->>Svc: Resolve owner & compute urgency (Status=FINAL -> ACT_NOW)
+        Svc->>ES: Append CHANGE_DETECTED, IMPACT_MAPPED, ACTION_RECOMMENDED
+        Svc->>Inbox: Present Action in Reviewer Inbox
     else Confidence is LOW
-        Rubric->>Pipeline: Block Action Routing
-        Pipeline->>ES: Append ACTION_ESCALATED_TO_EXPERT
-        ES->>Inbox: Route to Expert Review Queue
+        Svc->>ES: Append ACTION_ESCALATED_TO_EXPERT
+        Svc->>Reviewer: Route to Expert Review Queue
     end
 ```
 
----
+### 5.2 Strata Service API Contract (`StrataService`)
 
-### 6.2 Human Override & Audit Preservation Flow
-
-Demonstrating PRD **FR7.4**: human overrides never overwrite system claims; they append a linked audit event alongside the original claim.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Reviewer as Compliance Officer
-    participant UI as Reviewer Workspace
-    participant ES as Event Store
-    participant Audit as Audit Projection Engine
-
-    Reviewer->>UI: Inspects Action "Update Document Section 4.2"
-    UI->>Reviewer: Displays Paired Citations (Proceeding vs Document)
-    Reviewer->>UI: Modifies action: "Update Section 4.3 instead (typo in mapping)"
+```python
+class StrataService:
+    def ingest_user(user_id: str, name: str, email: str, role: UserRole) -> User
+    def ingest_proceeding_version(proceeding_id: str, version_label: str, file_path_or_content: str, ...) -> ProceedingVersion
+    def ingest_document(doc_id: str, title: str, doc_type: str, owner_id: str, raw_text: str) -> InternalDocument
+    def ingest_obligation(obl_id: str, description: str, owner_id: str, linked_doc_id: str) -> Obligation
+    def ingest_project(proj_id: str, name: str, description: str, owner_id: str, linked_obligations: list[str]) -> Project
     
-    UI->>ES: Append HUMAN_OVERRIDE_RECORDED
-    Note over ES: Payload retains original system recommendation,<br/>original citations, user correction, and user rationale.
-    
-    UI->>ES: Append ACTION_STATE_CHANGED (MODIFIED)
-    ES->>Audit: Re-fold entity timeline
-    Audit-->>UI: Render updated timeline showing both System Claim + Human Override
+    def analyze_versions(proceeding_id: str, prev_version_id: str, curr_version_id: str) -> dict
+    def resolve_expert_review(target_id: str, reviewer_id: str, decision: str, rationale: str) -> AuditEvent
+    def record_human_override(action_id: str, user_id: str, updated_action_text: str, override_rationale: str) -> ActionRecommendation
 ```
 
 ---
 
-## 7. Living State, Timeline & Audit Defensibility Architecture
+## 6. Living State & Audit Defensibility
 
-To satisfy PRD **G6** and **FR7.3**, an auditor must be able to reconstruct every decision made months earlier without inspecting application logs or model prompts.
+### 6.1 Living Timeline & Audit Reconstruction
+To satisfy PRD **G6** and **FR7.3**, an auditor must be able to reconstruct the historical decision-making process without access to raw model prompts or ephemeral server logs.
+- The `generate_audit_dossier(stream_id)` method queries all events linked to `stream_id` (e.g., `obligation:OBL-NOX-01` or `proceeding:FERC-RM22-14`) ordered by timestamp.
+- Produces a chronological record showing what changed, when the enterprise became aware, what was concluded, what actions were recommended, and who signed off.
 
-### 7.1 Audit Timeline Data Structure
-
-A living timeline is generated deterministically by querying all `AuditEvents` linked to an entity stream:
-
-```json
-{
-  "entity_id": "OBL-GRID-2024-01",
-  "entity_type": "OBLIGATION",
-  "description": "Maintain 72-hour auxiliary battery backup for critical substation telemetry.",
-  "current_status": "ACTIVE",
-  "timeline": [
-    {
-      "event_id": "evt_01918a20-001",
-      "timestamp": "2026-03-15T09:00:00Z",
-      "event_type": "PROCEEDING_VERSION_INGESTED",
-      "actor": "pipeline:ingestion",
-      "summary": "Docket FERC-RM24-1 v1 (Notice of Proposed Rulemaking) ingested."
-    },
-    {
-      "event_id": "evt_01918a20-002",
-      "timestamp": "2026-03-15T09:05:22Z",
-      "event_type": "CHANGE_DETECTED",
-      "actor": "pipeline:diff_engine",
-      "summary": "Proposed increase in backup duration from 72h to 96h.",
-      "citation": {
-        "document_id": "FERC-RM24-1",
-        "version_id": "v1",
-        "locator": "sec_3_b/p_04",
-        "quoted_text": "all bulk-power sub-facilities must maintain a minimum 96-hour autonomous power reserve"
-      },
-      "urgency": "MONITOR"
-    },
-    {
-      "event_id": "evt_01918a20-003",
-      "timestamp": "2026-08-01T14:20:10Z",
-      "event_type": "STATUS_TRANSITION_DETECTED",
-      "actor": "pipeline:status_engine",
-      "summary": "Docket FERC-RM24-1 transitioned to FINAL ORDER (Order 904).",
-      "urgency": "ACT_NOW"
-    },
-    {
-      "event_id": "evt_01918a20-004",
-      "timestamp": "2026-08-01T14:22:05Z",
-      "event_type": "ACTION_RECOMMENDED",
-      "actor": "pipeline:action_engine",
-      "summary": "Procure and commission 96-hour capacity batteries before effective date 2027-01-01.",
-      "suggested_owner": "Substation Ops Lead",
-      "urgency": "ACT_NOW",
-      "state": "PENDING"
-    },
-    {
-      "event_id": "evt_01918a20-005",
-      "timestamp": "2026-08-03T10:15:00Z",
-      "event_type": "ACTION_STATE_CHANGED",
-      "actor": "user:s.martinez@enterprise.com",
-      "summary": "Action accepted by Substation Ops Lead. Project PROJ-BATT-96 initiated.",
-      "state": "ACCEPTED"
-    }
-  ]
-}
-```
-
-### 7.2 Deterministic Audit Exporter
-- **Input**: `entity_id` or date range query.
-- **Output**: Formal Markdown or PDF Audit Dossier.
-- **Defensibility Guarantee**: Because the export is rendered directly from immutable events containing verbatim validated citations, it produces a self-contained legal and compliance proof pack.
+### 6.2 Defensible Human Overrides
+When a compliance officer modifies or rejects an action:
+1. The original system recommendation is **never deleted or updated in place**.
+2. A new `HUMAN_OVERRIDE_RECORDED` event is appended containing:
+   - `original_action`: The exact text generated by the system.
+   - `modified_action`: The user's revised instruction.
+   - `override_rationale`: Mandatory explanation for why the system interpretation was adjusted.
+   - `actor_id`: ID of the human reviewer making the modification.
+3. The action state transitions to `MODIFIED` while preserving complete audit reconstructability.
 
 ---
 
-## 8. User Interface & Workspace Architecture
+## 7. Technology Stack
 
-Strata's presentation tier is built as an interactive, citation-navigable cockpit for analysts, project owners, and compliance leads.
+### 7.1 MVP Implementation Stack
 
-```
-┌────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│ STRATA  |  Docket: FERC-RM24-1 (v1: NPRM → v2: Final Order)                [Reviewer: M. Chen]   │
-├────────────────────────────────┬───────────────────────────────────────────────────────────────────┤
-│ 1. PROCEEDING DIFF NAVIGATOR   │ 2. PAIRED CITATION & IMPACT INSPECTOR                             │
-│                                │                                                                   │
-│ [v1 Draft]       [v2 Final]    │ Change: Scope expanded to Tier 2 substations                      │
-│ - § 3.1 Unchanged              │ Confidence: HIGH (All citations verified)                         │
-│ * § 3.2 MODIFIED (Material)    │                                                                   │
-│   "72 hours" → "96 hours"      │ Regulatory Source Passage (v2 Final, § 3.2, ¶ 4):                 │
-│ * § 4.1 ADDED (Material)       │ ┌───────────────────────────────────────────────────────────────┐ │
-│   Tier 2 substations covered   │ │ "...all Tier 2 and bulk-power sub-facilities must maintain a  │ │
-│ - § 5.0 Renumbered Immaterial  │ │ minimum 96-hour autonomous reserve..."                        │ │
-│                                │ └───────────────────────────────────────────────────────────────┘ │
-│                                │                                                                   │
-│ Status Transition:             │ Mapped Enterprise Asset: Obligation OBL-GRID-2024-01              │
-│ DRAFT ──▶ FINAL (Order 904)    │ Internal Asset Text (Substation Battery SOP § 2.1):               │
-│                                │ ┌───────────────────────────────────────────────────────────────┐ │
-│                                │ │ "Auxiliary reserves are specified at 72 hours for Tier 1..."  │ │
-│                                │ └───────────────────────────────────────────────────────────────┘ │
-├────────────────────────────────┴───────────────────────────────────────────────────────────────────┤
-│ 3. ACTION INBOX & ROUTING (Urgency: ACT_NOW)                                                       │
-│                                                                                                    │
-│ Recommended Action: Update Substation Battery SOP § 2.1 to 96 hours & initiate retrofit plan.      │
-│ Suggested Owner: Substation Ops Lead (deterministic lookup from OBL-GRID-2024-01)                  │
-│                                                                                                    │
-│ [ Accept Action ]   [ Modify Action & Reassign ]   [ Escalate to Counsel ]   [ Dismiss ]           │
-└────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### 8.1 Functional Workspace Views
-- **Reviewer Inbox**: Grouped by urgency (`ACT_NOW`, `ACT_SOON`, `MONITOR`). Displays substantive change summaries, paired citations in context, mapped assets, and pending actions with Accept / Modify / Reassign / Dismiss controls.
-- **Expert Review Queue**: Dedicated queue isolated from operational workflows. Displays only items tagged `confidence = LOW`, showing the specific triggered rubric signal (`SIG_CITE_FAIL`, `SIG_AMBIG_TERM`), model hypotheses, and full text context for human resolution.
-- **Living Entity Timeline View**: Interactive vertical audit timeline for any obligation, project, or policy. Displays every ingestion, detected change, action assignment, and human override in chronological order.
-
-### 8.2 Key UI Capabilities
-1. **Side-by-Side Synchronized Diff**: Renders structural deltas with color-coded additions, deletions, and paragraph movements.
-2. **Interactive Citation Highlighting**: Clicking any citation card immediately scrolls the proceeding view and highlights the exact character span in context.
-3. **Paired Evidence Cards**: Displays the regulatory quote side-by-side with the matching internal obligation or document quote.
-4. **Dedicated Expert Review Queue**: Isolates ambiguous items requiring human legal judgment, displaying the exact rubric signals triggered.
-5. **Interactive Audit Trail**: Displays an unalterable vertical timeline showing every stage from initial ingestion to human sign-off.
-
----
-
-## 9. Technology Stack & Implementation Mapping
-
-### 9.1 MVP Implementation Technology Stack
-
-| Layer | MVP Choice | Rationale & Capabilities |
+| Layer | Component | Role in MVP |
 |---|---|---|
-| **Database** | SQLite (`strata.db`) / PostgreSQL | Stores `users`, `proceedings`, `documents`, `obligations`, `projects`, `actions`, and append-only `audit_events`. Zero infra setup for SQLite, full relational integrity. |
-| **Document Parser** | `PyMuPDF` (`fitz`) & `BeautifulSoup4` | Open-source extraction for PDFs (dockets, orders) and HTML filings, segmenting into Section → Paragraph → Sentence hierarchy with character spans. |
-| **Embeddings & Vector Search** | `sentence-transformers/all-MiniLM-L6-v2` (or `text-embedding-3-small`) | Dense 384-d semantic vectors to identify relevant regulations and match changes to candidate internal obligations, projects, and policies via cosine similarity. |
-| **Diffing Engine** | Python `difflib.SequenceMatcher` | Fast, deterministic paragraph-level structural alignment without hallucination risk. |
-| **LLM Orchestration** | Claude 3.5 Sonnet / Gemini Flash | Schema-constrained JSON calls for materiality classification, dual-grounded impact matching, and action drafting. |
-| **Backend Framework** | Python 3.11+ (FastAPI) | Lightweight asynchronous REST API serving ingestion, change analysis, action state transitions, and audit queries. |
-| **Web Frontend** | React / Vite + Tailwind CSS | Fast, clean interface for side-by-side diff review, paired citation explorer, action inbox, and expert review queue. |
+| **Database** | SQLite (`strata.db`) | Relational entity storage and append-only event store with full foreign key constraints. Zero infrastructure setup. |
+| **Document Parser** | `PyMuPDF` (`fitz`) & `BeautifulSoup4` | Open-source PDF text extraction (stripping running headers) and HTML DOM normalization. |
+| **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` | Dense 384-dimensional vector embeddings for semantic asset retrieval via cosine similarity. |
+| **Diffing Engine** | Python `difflib.SequenceMatcher` | Deterministic structural paragraph alignment without model hallucination risk. |
+| **LLM Classification** | Claude 3.5 Sonnet / Gemini Flash | Schema-constrained materiality and change classification. |
+| **Backend API** | FastAPI (Python 3.9+) | Lightweight REST service serving analysis, inboxes, expert queues, and audit exports. |
+| **Test Frameworks** | `behave` & `pytest` | Standard Cucumber/Gherkin BDD specifications and unit/integration quality gates. |
 
-### 9.2 Production Enterprise Target Stack
-
-| Layer | Production Technology | Enterprise Justification |
-|---|---|---|
-| **Data Layer** | PostgreSQL 16 + `pgvector` | Transactional event storage, row-level locking, and combined hybrid SQL + vector queries |
-| **Event Streaming** | Apache Kafka / EventStoreDB | Scalable event-sourcing backbone for multi-jurisdiction docket streams |
-| **Document Store** | S3-compatible Object Storage (versioned, WORM) | Write-Once-Read-Many storage for regulatory filings and company governing documents |
-| **Identity & Security** | OpenID Connect / SAML (Okta, Azure AD) | Enterprise RBAC, audit actor identification, role-based action routing |
+### 7.2 Production Evolution Path
+- **Database**: PostgreSQL 16 with `pgvector` for combined SQL queries and high-throughput vector index scans.
+- **Document Store**: S3-compatible WORM (Write Once, Read Many) object storage for raw regulatory filings.
+- **Streaming & Event Store**: EventStoreDB or Kafka for multi-jurisdiction distributed docket streams.
+- **Identity & RBAC**: SAML / OIDC enterprise SSO for role-based action routing and audit attribution.
 
 ---
 
-## 10. Requirements Traceability Matrix
+## 8. Verification & Testing Framework
 
-This matrix verifies that every Goal (PRD §2) and Functional Requirement (PRD §5) is mapped to a concrete architectural component:
+### 8.1 Cucumber BDD Feature Specifications (`features/`)
+Testing is driven by standard Gherkin feature files executed with `behave`:
+
+1. **`change_detection.feature`**: Verifies paragraph diffing, status transition detection (`PROPOSED → FINAL`), and machine-verifiable citations across FERC Order 2023 versions.
+2. **`impact_mapping.feature`**: Verifies embedding retrieval and dual-grounded citations mapping FERC inverter ride-through rules to the Desert Solar Project (`PROJ-SOLAR-DESERT-02`).
+3. **`confidence_escalation.feature`**: Verifies that ambiguous statutory language in EPA NSPS Subpart KKKK (*"ancillary emergency generation asset"*) is demoted to `LOW` confidence, routed to the Expert Review Queue, and logged upon resolution.
+4. **`living_audit_trail.feature`**: Verifies that human overrides append new audit events preserving the original text, and reconstructs the full living dossier for `OBL-CEMS-02`.
+
+### 8.2 Automated Quality Gates (`tests/`)
+Pytest unit and integration test suite enforcing five quality gates:
+
+```bash
+PYTHONPATH=. pytest -v tests/
+PYTHONPATH=. behave features/
+```
+
+| Gate | Test Module | Verification Assertion |
+|---|---|---|
+| **1. Citation Veracity** | `tests/test_citation_validator.py` | Exact/normalized substring validation passes; hallucinated quotes fail deterministically. |
+| **2. Diff Determinism** | `tests/test_diff_engine.py` | Sequence alignment accurately detects paragraph additions, deletions, and modifications. |
+| **3. Confidence Gating** | `tests/test_confidence_rubric.py` | `SIG_CITE_FAIL` and `SIG_AMBIG_TERM` force `LOW` confidence and trigger escalation. |
+| **4. Event Immutability** | `tests/test_database_and_events.py` | Appending events preserves chronological integrity and enables dossier reconstruction. |
+| **5. End-to-End Integration**| `tests/test_end_to_end.py` | Runs the full pipeline on real FERC and EPA regulations against the two enterprise test projects. |
+
+---
+
+## 9. Requirements Traceability Matrix
 
 | PRD Req / Goal | Requirement Description | Architectural Subsystem / Component | Implementation Mechanism |
 |---|---|---|---|
-| **G1 / FR2.1, FR2.2** | Detect material changes between proceeding versions | Deterministic Diff & Change Detection Pipeline (§3.2) | Paragraph-level sequence alignment followed by schema-constrained LLM materiality classification. |
+| **G1 / FR2.1, FR2.2** | Detect material changes between proceeding versions | Deterministic Diff Pipeline (§3.2) | Paragraph sequence alignment (`difflib`) and schema-constrained LLM materiality classification. |
 | **G2 / FR3.1, FR3.2** | Citation-grade grounding & verifiable claims | Canonical Coordinate System & Citation Validator (§3.1, §3.2) | Hierarchical coordinates (`doc/ver/sec/para/char_span`). Substring match code check gates all claims. |
-| **G3 / FR2.4, FR5.3** | Classify document status (draft vs final) & gate urgency | Status Extractor & Urgency Rules Engine (§3.1, §3.4) | Dual rule/LLM status pass. Transition detector emits `STATUS_TRANSITION`. Urgency rules override model. |
-| **G4 / FR4.1, FR4.2** | Map changes to internal obligations, projects, docs | Hybrid Retrieval & Impact Mapping Engine (§3.3) | Sparse BM25 + Dense vector retrieval feeding dual-grounding LLM reasoner with bidirectional citations. |
-| **G5 / FR5.1, FR5.2** | Recommend actionable tasks & route to owners | Action Recommendation & Routing Engine (§3.4) | LLM generates action; owner is resolved deterministically from entity metadata. Tracked in state machine. |
-| **G6 / FR7.1, FR7.3** | Append-only living state & auditable timeline | Event Sourcing & Projection Engine (§5.3, §7.1) | Immutable `AuditEvent` log. Reconstructs full chronological timeline and one-click audit report. |
+| **G3 / FR2.4, FR5.3** | Classify document status (draft vs final) & gate urgency | Status Extractor & Urgency Rules Engine (§3.1, §3.4) | Preamble regex pass. Transition detector emits `STATUS_TRANSITION`. Urgency rules override model. |
+| **G4 / FR4.1, FR4.2** | Map changes to internal obligations, projects, docs | Dense Vector Search & Impact Mapping Engine (§3.3) | Dense embedding retrieval (`sentence-transformers`) feeding dual-grounding LLM reasoner with bidirectional citations. |
+| **G5 / FR5.1, FR5.2** | Recommend actionable tasks & route to owners | Action Recommendation & Routing Engine (§3.4) | Model drafts action; owner is resolved deterministically from entity metadata (`owner_id`). |
+| **G6 / FR7.1, FR7.3** | Append-only living state & auditable timeline | Event Sourcing & Projection Engine (§4.3, §6.1) | Immutable `audit_events` table. Deterministic `generate_audit_dossier` reconstructs complete history. |
 | **G7 / FR6.1, FR6.3** | Transparent confidence rubric & Expert Escalation | Confidence Scoring Engine & Expert Queue (§3.5) | Explicit multi-signal rubric. `LOW` confidence structurally blocks action routing, dispatching to queue. |
-| **G8 / FR4.3** | Detect conflicts & dependencies across regulations | Multi-mapping Graph & Impact Aggregator (§3.3, §5.3) | Many-to-many impact mappings; conflicting change events projected onto shared obligation timelines. |
+| **G8 / FR4.3** | Detect conflicts & dependencies across regulations | Many-to-Many Impact Propagation (§3.3) | Document impacts automatically cascade to linked obligations and projects on shared timelines. |
 | **FR7.4** | Defensible Human Overrides | Human Override Handler (§6.2) | Overrides append new `HUMAN_OVERRIDE_RECORDED` events preserving both model hypothesis and user correction. |
-
----
-
-## 11. Verification & Testing Architecture
-
-To validate system reliability for regulated environments, the testing framework enforces six automated gates backed by a comprehensive scenario test suite:
-
-```mermaid
-graph TD
-    TestRunner[Automated Test Suite]
-    
-    TestRunner --> T1[Gate 1: Citation Veracity Check]
-    TestRunner --> T2[Gate 2: Diff Determinism Check]
-    TestRunner --> T3[Gate 3: Status Transition Gating Check]
-    TestRunner --> T4[Gate 4: Ambiguity Escalation Check]
-    TestRunner --> T5[Gate 5: Event Sourcing Immutability Check]
-    TestRunner --> T6[Gate 6: Audit Dossier Reconstruction Check]
-```
-
-### 11.1 The Six Automated Quality Gates
-1. **Gate 1: Synthetic Citation Veracity Check**: Every emitted citation is tested against the source snapshot; assert zero hallucinated or mismatched substring quotes ($100\%$ string recall).
-2. **Gate 2: Diff Alignment Determinism Check**: Execute diffs across synthetic revisions with seeded formatting shifts vs substantive edits; assert zero false-positive material flags on renumbering.
-3. **Gate 3: Status Transition Urgency Check**: Ingest draft then final versions; assert urgency transitions deterministically from `MONITOR` to `ACT_NOW`.
-4. **Gate 4: Ambiguity & Escalation Check**: Inject ambiguous, undefined statutory terms (e.g., *"Tier 2 covered operators"*); verify that the record is demoted to `LOW` and routed to Expert Review.
-5. **Gate 5: Immutability & Event Sequence Check**: Attempt simulated state mutation; verify database rejects in-place updates and only accepts monotonically increasing revision events.
-6. **Gate 6: Full Audit Dossier Reconstruction Check**: Rebuild an obligation's entire lifecycle solely from its event log; assert zero dependency on ephemeral model logs or prompt history.
-
-### 11.2 Comprehensive Test Scenario Matrix
-
-| Test Domain | Target Behavior | Test Method |
-|---|---|---|
-| **Citation Integrity** | Zero tolerance for hallucinated quotes | Automated check: for every emitted `Citation`, assert `quoted_text` is an exact/normalized substring at the claimed `section/para/sentence` location in the immutable version. |
-| **Status Classification** | Accurate draft vs. final determination | Seed synthetic versions with unambiguous and edge-case status language; assert extracted `status` matches ground truth, including transition cases. |
-| **Material Change Accuracy** | High precision/recall on deltas | Seed a known set of material and immaterial diffs (e.g., deadline shift vs. paragraph renumbering); assert classification matches ground truth. |
-| **Impact Mapping Grounding** | Bidirectional textual citations | Seed known obligation/project/document links to specific changes; assert links surface with verified quotes on both regulatory and corporate sides. |
-| **Escalation Behavior** | Low-confidence blocking | Seed deliberately ambiguous scenarios (undefined statutory terms, near-tied candidate retrieval scores); assert records route to Expert Review and cannot auto-generate actions. |
-| **Audit Reconstructability** | Defensible lifecycle playback | For a complete scenario, generate the audit export and verify it answers "what changed / when known / what concluded / what done / by whom" solely from event records. |
-| **Human Override Non-Regression** | Original claims preserved | Simulate a reviewer overriding a `ChangeRecord`; assert the original system claim persists unmodified and the correction appears as a linked `AuditEvent`. |
-
----
-
-## 12. Future Work & Deferred Scope
-
-Per PRD Section 7, the following capabilities are explicitly deferred from MVP scope:
-
-- **Live Docket & Regulatory Connectors**: Real-time automated web scrapers and API connectors to live e-filing systems (e.g., regulations.gov, FERC eLibrary, state PUC dockets) replacing synthetic and uploaded file ingestion.
-- **Learned Confidence Calibration**: Transitioning from a static deterministic rubric to a learned calibration model trained on historical human resolutions from the Expert Review queue.
-- **Enterprise Notification & SLA Tracking**: Email, Slack, and webhook notification triggers with SLA escalation rules for pending and overdue compliance actions.
-- **Multi-Jurisdiction & Cross-Docket Graphing**: Cross-referencing inter-docket dependencies, federal vs. state regulatory conflicts, and multi-lingual proceeding support.
-- **Automated Policy Redlining**: Automated redline draft generation for internal policies and SOPs (requiring formal human review and legal sign-off before committing to the document of record).
