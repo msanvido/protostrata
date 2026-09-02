@@ -498,8 +498,22 @@ PYTHONPATH=. behave features/
 | **3. Confidence Gating** | `tests/test_confidence_rubric.py` | `SIG_CITE_FAIL` and `SIG_AMBIG_TERM` force `LOW` confidence and trigger escalation. |
 | **4. Event Immutability** | `tests/test_database_and_events.py` | Appending events preserves chronological integrity and enables dossier reconstruction. |
 | **5. End-to-End Integration**| `tests/test_end_to_end.py` | Runs the full pipeline on real FERC and EPA regulations against the two enterprise test projects. |
+| **6. Live LLM E2E** | `tests/test_live_llm_e2e.py` | Runs the complete pipeline with real model inference (Gemini, Claude, GPT-4o) and checks citations. |
 
-### 8.3 Prompt Optimization & Validation via Evals and GEPA Optimizer
+### 8.3 Frontend UI Verification Suite (`frontend/src/test/`)
+
+To validate that the interactive React workspace functions correctly and reliably reflects backend state, an automated component and integration test suite is implemented using **Vitest** and **React Testing Library**:
+
+```bash
+cd frontend && npm test
+```
+
+| UI Test Module | Verification Scope & Assertions |
+|---|---|
+| **`components.test.tsx`** | 1. **Header**: Renders logo, status chip (`FINAL RULE`), LLM indicator, and tests proceeding toggle.<br>2. **OverviewTab**: Validates metric card counts, capital project summaries, and compliance obligations.<br>3. **ChangeDiffViewer**: Asserts dual-column comparative citations with exact character highlights.<br>4. **ActionInbox**: Validates action directives, owner badges, and urgency filtering (`ACT_NOW` vs `MONITOR`).<br>5. **HumanOverrideModal**: Verifies modal opening, input of revised directive and mandatory rationale, and commit handling.<br>6. **ExpertReviewQueue**: Verifies low-confidence escalation display, trigger signal chips (`SIG_AMBIG_TERM`), and resolution prompts.<br>7. **AuditTimelineStream**: Validates chronological event stream reconstruction and entity presets. |
+| **`App.test.tsx`** | 1. **Full Workspace Navigation**: Validates seamless tab switching between Dashboard, Changes, Actions, Expert Queue, and Audit Stream.<br>2. **Live Analysis Trigger**: Mocks API responses, executes "Run Live Analysis", verifies loading state, and confirms dynamic UI updates across all tabs. |
+
+### 8.4 Prompt Optimization & Validation via Evals and GEPA Optimizer
 
 To guarantee high model fidelity while preventing prompt drift or regression, prompt development across Strata's interpretation components (Materiality Classifier, Dual-Grounding Impact Matcher, Action Recommender) is executed via an automated, evaluation-driven optimization pipeline.
 
