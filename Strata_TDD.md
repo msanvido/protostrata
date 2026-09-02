@@ -517,7 +517,7 @@ cd frontend && npm test
 
 To guarantee high model fidelity while preventing prompt drift or regression, prompt development across Strata's interpretation components (Materiality Classifier, Dual-Grounding Impact Matcher, Action Recommender) is executed via an automated, evaluation-driven optimization pipeline.
 
-#### 8.3.1 Golden Evaluation Benchmarks (`evals`)
+#### 8.4.1 Golden Evaluation Benchmarks (`evals`)
 An offline golden evaluation dataset of regulatory delta pairs and enterprise asset context is maintained to benchmark model performance against deterministic criteria:
 1. **Materiality Classification Benchmark**:
    - Curated pairs of regulatory paragraph changes annotated with ground-truth materiality (`MATERIAL` vs `IMMATERIAL`) and change type taxonomy.
@@ -528,7 +528,7 @@ An offline golden evaluation dataset of regulatory delta pairs and enterprise as
 3. **Impact Mapping Grounding Benchmark**:
    - Ground-truth mappings linking regulatory shifts to company obligations, measuring false discovery rate and dual-citation integrity.
 
-#### 8.3.2 GEPA (Generative Evolutionary Prompt Architecture) Optimizer
+#### 8.4.2 GEPA (Generative Evolutionary Prompt Architecture) Optimizer
 To systematically discover optimal prompt structures and few-shot exemplars without manual trial-and-error, Strata employs a **GEPA-based evolutionary prompt optimization loop**:
 
 ```

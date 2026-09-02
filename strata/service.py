@@ -22,6 +22,16 @@ from strata.pipeline.confidence import ConfidenceRubric
 from strata.pipeline.action_router import ActionRouter
 
 class StrataService:
+    """Core orchestrator for Strata Regulatory Intelligence & Living Operations.
+    
+    Coordinates the 6-stage lifecycle:
+      1. Ingestion: Canonical paragraph segmentation, status detection, and immutable snapshot storage.
+      2. Deterministic Diffing: Sequence alignment detecting paragraph modifications, additions, and deletions.
+      3. Classification & Citation Gating: Verbatim quote validation with optional live LLM enrichment.
+      4. Impact Mapping: Semantic dense retrieval mapping regulatory shifts to enterprise assets.
+      5. Action Routing: Deterministic urgency calculation gated by proceeding status (FINAL -> ACT_NOW).
+      6. Living Audit Trail: Append-only event store for defensible timeline reconstruction.
+    """
     def __init__(self, db_path: str = "strata.db", llm_client: Optional[Any] = None):
         self.db = Database(db_path)
         self.repo = StrataRepository(self.db)

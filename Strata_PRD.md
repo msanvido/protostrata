@@ -16,12 +16,11 @@ Today, compliance and regulatory affairs teams handle this by manually re-readin
 - Is the change in a draft (non-binding, still negotiable) or a final order (binding, triggers obligations)?
 - What internal obligation, project, or document does this change actually touch?
 - What should a human do about it, and who is the right human to do it?
-- Can we trust this interpretation enough to act on it automatically, or does a person need to check it first (human the loop)
-- Who is responsible for acting on this change
-- What is the timing, by when does this change need to be actioned (due date)
-- What happens if we don't act on this change (risk)
-- Are there any conflicts or dependencies with other existing or pendig regulations
-
+- Can we trust this interpretation enough to act on it automatically, or does a person need to check it first (human-in-the-loop)?
+- Who is responsible for acting on this change?
+- What is the timing, by when does this change need to be actioned (due date)?
+- What happens if we don't act on this change (risk)?
+- Are there any conflicts or dependencies with other existing or pending regulations?
 
 Strata is built to close this gap: a **change-to-action workspace**, not another feed.
 
@@ -36,7 +35,7 @@ Strata is built to close this gap: a **change-to-action workspace**, not another
 | G5 | Recommend a concrete next action and route it to the correct reviewer/role | Turns intelligence into an assigned, trackable task |
 | G6 | Maintain a living, versioned, auditable project state, including impacts and actions, over time | Regulatory response is a long-lived process; the system must show *why* a decision was made months later, to an auditor or examiner |
 | G7 | Escalate low-confidence interpretations instead of guessing | A confidently wrong compliance interpretation is worse than an honest "needs human review" — trust is the product |
-| G8 | Detect conflicts or dependencies with other existing or pendig regulations | Regulatory response is a long-lived process; the system must show *why* a decision was made months later, to an auditor or examiner |
+| G8 | Detect conflicts or dependencies with other existing or pending regulations | Enables holistic cross-docket risk visibility and prevents siloed compliance errors |
 
 ### Non-Goals (out of scope for this build)
 
