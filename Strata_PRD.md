@@ -97,16 +97,36 @@ Owns a specific compliance obligation, project workstream, or internal document 
 - FR6.3: The system explains *why* it is uncertain (e.g., "ambiguous whether 'affected entities' includes Tier 2 vendors — no explicit definition found") rather than a generic low-confidence flag.
 - FR6.4: Human decisions on escalated items are captured and reduce/adjust confidence scoring context going forward (logged, not necessarily model-retrained, for MVP).
 
-### FR7 — Living Project State & Audit Trail
+### FR7 — Living Project State, Dynamic Lifecycle & Multi-Persona Workspace
 - FR7.1: Every obligation, project, and document maintains a timeline of every regulatory change that touched it, the mapping rationale, the action taken, who took it, and when.
-- FR7.2: All state transitions (draft→final, action pending→done, low-confidence→resolved) are append-only events; nothing is silently overwritten.
+- FR7.2: All state transitions (draft→final, action pending→accepted→done, low-confidence→resolved) are append-only events; nothing is silently overwritten.
 - FR7.3: A full audit export (per obligation/project or company-wide, for a date range) must be producible showing: what changed, when the company became aware, what was concluded, what was done, and by whom.
 - FR7.4: Human overrides of any system claim/mapping/action are recorded alongside the original system output — never replacing it, always alongside it (for defensibility: "the system said X, a human corrected to Y, on this date").
-- FR7.5: Modern single-page Workspace User Interface:
-  - FR7.5.1: Multi-view workspace providing Dashboard & Overview, Change Records & Paired Citations, Action Inbox, Expert Review Queue, and Living Audit Dossier.
-  - FR7.5.2: Side-by-side comparative citation viewer with highlighted character offsets into immutable source snapshots.
-  - FR7.5.3: Non-destructive human override modal capturing reviewer modification and mandatory audit rationale.
-  - FR7.5.4: Expert review queue resolution workflow allowing legal counsel to confirm or dismiss ambiguous items with recorded justification.
+- FR7.5: Dynamic Project & Regulatory Lifecycle Management:
+  - FR7.5.1: Dynamic project creation (`POST /projects`) and deletion (`DELETE /projects/{id}`) with assigned engineering leads, operational status (`ACTIVE`, `PLANNED`, `ON_HOLD`), and vector store re-indexing.
+  - FR7.5.2: Dynamic regulatory docket ingestion (`POST /proceedings`) and deletion (`DELETE /proceedings/{id}`) with canonical coordinate segmentation (`Section → Paragraph → Sentence`).
+  - FR7.5.3: Baseline All-New Section Analysis: When ingesting a new regulation with no prior baseline, all sections are processed as newly added (`diff_type = ADDED`), classified for substantive materiality and citation veracity, and mapped to enterprise projects.
+  - FR7.5.4: Non-destructive audit trail logging for all project and proceeding lifecycle events (`PROJECT_CREATED`, `PROJECT_DELETED`, `PROCEEDING_CREATED`, `PROCEEDING_DELETED`).
+- FR7.6: Persona-Driven Workspace User Interface:
+  - FR7.6.1: **Universal Header View Mode Switcher**: Seamless switching between Executive Dashboard, Project Lead View, and Compliance Analyst View.
+  - FR7.6.2: **Executive Dashboard (`DashboardView`)**:
+    - High-level KPI overview (Capital Projects, Monitored Dockets, Governing Obligations, High-Urgency Directives, Expert Review Queue).
+    - Summary of all enterprise projects, assigned leads, operational status, and open directive count.
+    - Summary of all tracked regulatory dockets, jurisdictions, current version labels, filing dates, and status (`FINAL RULE` vs `PROPOSED`).
+    - Consolidated Enterprise Compliance Directives Matrix tracking global resolution progress.
+  - FR7.6.3: **Project Lead View (`ProjectLeadView`)**:
+    - Persona filter and active project selector.
+    - Project scope, description, and real-time compliance completion progress bar.
+    - Applicable regulations per project with current versions and bindingness status (`FINAL RULE - ACT NOW` vs `PROPOSED - MONITOR`).
+    - Governing compliance obligations linked to the project.
+    - Assigned action directives inbox with interactive lifecycle state transitions (**`Accept Directive`**, **`✓ Mark Done`**, **`Modify Directive`**).
+  - FR7.6.4: **Compliance Analyst View (`ComplianceAnalystView`)**:
+    - Docket portfolio workspace with filing status badges and live diff analysis trigger.
+    - Downstream project impact mapping cross-referencing affected internal facilities and permits.
+    - Side-by-side sequence alignment diff viewer with highlighted character offsets into immutable source snapshots.
+    - Non-destructive human override modal capturing reviewer modifications and mandatory audit justifications.
+    - Expert review queue resolution workflow allowing legal counsel to confirm or dismiss ambiguous statutory language with recorded justification.
+    - Living audit dossier explorer reconstructing immutable chronological event streams.
 
 ## 6. Success Metrics (for the challenge demo)
 
