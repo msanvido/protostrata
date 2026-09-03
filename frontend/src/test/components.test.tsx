@@ -194,7 +194,8 @@ describe('UI Component Unit & Integration Tests', () => {
       />
     );
 
-    expect(screen.getByText('Gas Turbine Substation for Tier 4 Datacenter')).toBeInTheDocument();
+    expect(screen.getByText(/Enterprise Capital Projects Portfolio/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Gas Turbine Substation for Tier 4 Datacenter').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Applicable Regulations & Version Status')).toBeInTheDocument();
     expect(screen.getByText(/Governing Compliance Obligations/i)).toBeInTheDocument();
     expect(screen.getByText(/Project Lead Actions & Workstream Directives/i)).toBeInTheDocument();

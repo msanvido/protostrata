@@ -24,7 +24,7 @@ export const App: React.FC = () => {
   const [viewMode, setViewMode] = useState<'dashboard' | 'project_lead' | 'compliance_analyst'>('dashboard');
 
   const [currentProceeding, setCurrentProceeding] = useState<string>('FERC-RM22-14');
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('PROJ-SOLAR-DESERT-02');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('ALL');
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [proceedings, setProceedings] = useState<Proceeding[]>([]);
@@ -61,9 +61,6 @@ export const App: React.FC = () => {
       setActions(acts);
       setProceedings(procs);
       setDocuments(docs);
-      if (projs.length > 0) {
-        setSelectedProjectId(projs[0].id);
-      }
 
       // Load initial dossier
       fetchAuditDossier('obligation:OBL-CEMS-02');
