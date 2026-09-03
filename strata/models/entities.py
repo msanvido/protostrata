@@ -21,10 +21,12 @@ class DocumentType(str, Enum):
     FILING = "FILING"
 
 class UserRole(str, Enum):
-    REVIEWER = "REVIEWER"
-    ASSIGNEE = "ASSIGNEE"
+    COMPLIANCE = "COMPLIANCE"
+    PROJECT_LEAD = "PROJECT_LEAD"
     LEAD = "LEAD"
     ADMIN = "ADMIN"
+    REVIEWER = "REVIEWER"
+    ASSIGNEE = "ASSIGNEE"
 
 class CharSpan(BaseModel):
     start: int

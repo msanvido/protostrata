@@ -94,7 +94,7 @@ export const App: React.FC = () => {
   };
 
   const handleRecordOverride = async (actionId: string, updatedText: string, rationale: string) => {
-    await api.recordOverride(actionId, 'u_reviewer', updatedText, rationale);
+    await api.recordOverride(actionId, 'u_compliance', updatedText, rationale);
     const refreshed = await api.getActions();
     setActions(refreshed);
     if (dossier) {

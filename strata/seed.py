@@ -8,16 +8,18 @@ def seed_database(db_path: str = "strata.db") -> StrataService:
     service = StrataService(db_path=db_path)
     service.db.reset()
 
-    # 1. Seed Reviewer & Admin Users
-    service.ingest_user("u_reviewer", "Elena Rostova", "e.rostova@regulated-compliance.com", UserRole.REVIEWER)
-    service.ingest_user("u_counsel", "David Sterling", "d.sterling@regulated-compliance.com", UserRole.LEAD)
+    # 1. Seed Compliance & Legal Counsel Users
+    service.ingest_user("u_compliance", "Elena Rostova", "e.rostova@regulated-compliance.com", UserRole.COMPLIANCE)
+    service.ingest_user("u_counsel", "David Sterling", "d.sterling@regulated-compliance.com", UserRole.COMPLIANCE)
+    # Legacy alias for u_reviewer pointing to Compliance Analyst
+    service.ingest_user("u_reviewer", "Elena Rostova (Compliance)", "reviewer.legacy@regulated-compliance.com", UserRole.COMPLIANCE)
 
     # 2. Seed Gas Turbine Datacenter Project
     gt_path = os.path.join(os.path.dirname(__file__), "..", "data", "company_context", "gas_turbine_datacenter.json")
     with open(gt_path, "r") as f:
         gt_data = json.load(f)
 
-    service.ingest_user(gt_data["user"]["id"], gt_data["user"]["name"], gt_data["user"]["email"], UserRole.ASSIGNEE)
+    service.ingest_user(gt_data["user"]["id"], gt_data["user"]["name"], gt_data["user"]["email"], UserRole.PROJECT_LEAD)
     for doc in gt_data["documents"]:
         service.ingest_document(doc["id"], doc["title"], doc["doc_type"], doc["owner_id"], doc["raw_text"])
     for obl in gt_data["obligations"]:
@@ -32,7 +34,7 @@ def seed_database(db_path: str = "strata.db") -> StrataService:
     with open(solar_path, "r") as f:
         solar_data = json.load(f)
 
-    service.ingest_user(solar_data["user"]["id"], solar_data["user"]["name"], solar_data["user"]["email"], UserRole.ASSIGNEE)
+    service.ingest_user(solar_data["user"]["id"], solar_data["user"]["name"], solar_data["user"]["email"], UserRole.PROJECT_LEAD)
     for doc in solar_data["documents"]:
         service.ingest_document(doc["id"], doc["title"], doc["doc_type"], doc["owner_id"], doc["raw_text"])
     for obl in solar_data["obligations"]:

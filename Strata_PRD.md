@@ -46,19 +46,23 @@ Strata is built to close this gap: a **change-to-action workspace**, not another
 
 ## 3. Users & Personas
 
-**Primary persona — Compliance/Regulatory Affairs Analyst ("Reviewer")**
-Monitors 10–50 active dockets across their portfolio. Needs to know, per new filing, "does this change anything I'm responsible for," with enough evidence to trust the answer or quickly override it.
+**Persona 1 — Compliance / Regulatory Affairs Analyst (`u_compliance`, `u_counsel`)**
+Monitors 10–50 active dockets across their regulatory portfolio (FERC, EPA, NERC). Tracks docket status transitions (draft vs final), reviews AI sequence diffs and verifiable citations, inspects downstream project impacts, resolves ambiguous language escalations in the Expert Review Queue, and manages the living audit dossier.
 
-**Secondary persona — Obligation/Project Owner ("Assignee")**
-Owns a specific compliance obligation, project workstream, or internal document (e.g., "Data Retention Policy v4," "Q3 Grid Interconnection Filing Project"). Receives routed actions when a regulatory change affects something they own.
+**Persona 2 — Project Lead / Asset Owner (`u_ops_lead`, `u_solar_lead`, `u_storage_eng`)**
+Responsible for engineering, construction, and operation of major capital assets (e.g. *Mojave Desert Solar*, *Tier 4 Datacenter Gas Turbine Substation*, *PJM Battery Energy Storage System*). Needs visibility into all applicable regulations governing their specific facilities, their current versions and bindingness, and assigned compliance action directives (`Accept Directive`, `Mark Done`, `Modify Directive`).
+
+**Persona 3 — Executive / Head of Compliance (Executive Dashboard)**
+Requires a global, consolidated cross-enterprise view of all capital projects, assigned project leads, tracked regulatory proceedings, current active version statuses, and enterprise-wide action directive completion progress.
 
 ## 4. Core User Stories
 
-1. *As a Reviewer*, when a new version of a docket I follow is ingested, I want a diff-level summary of what materially changed (not a reprint of the whole document), so I don't have to re-read everything.
-2. *As a Reviewer*, I want every claim of "this changed" backed by the exact source sentence/paragraph from both versions, so I can verify it in seconds rather than re-deriving it myself.
-3. *As a Reviewer*, I want to immediately know if a proceeding is a draft/NPRM or a final/adopted order, and have recommended urgency reflect that, so I don't over- or under-react.
-4. *As an Assignee*, I want to be told specifically which of my obligations, projects, or documents are affected by a change, with a short rationale, so I know what to do without reading the underlying filing.
-5. *As a Reviewer*, I want a recommended action (e.g., "update Section 4.2 of Data Retention Policy," "notify Project X owner of new deadline") routed to the correct owner, so nothing falls through the cracks.
+1. *As a Compliance Analyst*, when a new version of a docket I follow is ingested, I want a diff-level summary of what materially changed (not a reprint of the whole document), so I don't have to re-read everything.
+2. *As a Compliance Analyst*, I want every claim of "this changed" backed by the exact source sentence/paragraph from both versions, so I can verify it in seconds rather than re-deriving it myself.
+3. *As a Compliance Analyst*, I want to immediately know if a proceeding is a draft/NPRM or a final/adopted order, and have recommended urgency reflect that, so I don't over- or under-react.
+4. *As a Project Lead*, I want to see all applicable regulations governing my active projects, their current versions, and bindingness, and accept or complete my assigned workstream directives.
+5. *As a Compliance Analyst*, I want a recommended action (e.g., "update Section 4.2 of Data Retention Policy," "notify Project X owner of new deadline") routed to the correct project lead, so nothing falls through the cracks.
+6. *As an Executive*, I want a consolidated dashboard showing all projects, all dockets, responsible owners, and open directives to track enterprise compliance readiness.
 
 
 ## 5. Functional Requirements

@@ -94,10 +94,10 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ onClose, onSub
                   value={ownerId}
                   onChange={(e) => setOwnerId(e.target.value)}
                 >
-                  <option value="u_ops_lead">u_ops_lead (Operations Lead)</option>
-                  <option value="u_solar_lead">u_solar_lead (Solar/Storage Lead)</option>
-                  <option value="u_counsel">u_counsel (Regulatory Counsel)</option>
-                  <option value="u_reviewer">u_reviewer (Compliance Reviewer)</option>
+                  <option value="u_ops_lead">u_ops_lead (Operations & Thermal Lead)</option>
+                  <option value="u_solar_lead">u_solar_lead (Solar & Storage Lead)</option>
+                  <option value="u_storage_eng">u_storage_eng (Grid Storage Engineer)</option>
+                  <option value="u_compliance">u_compliance (Compliance Analyst)</option>
                 </select>
               </div>
 

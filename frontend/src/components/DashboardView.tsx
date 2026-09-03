@@ -168,7 +168,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
                     <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                      Counsel Owner: <span style={{ color: '#a5b4fc' }}>u_counsel / u_reviewer</span>
+                      Counsel / Compliance Owner: <span style={{ color: '#a5b4fc' }}>u_compliance / u_counsel</span>
                     </div>
                     <button
                       className="btn btn-secondary btn-sm"
