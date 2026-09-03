@@ -31,15 +31,18 @@ Strata is a **change-to-action workspace** that bridges the gap between external
 
 ## Quickstart
 
-### 1. Install Dependencies
+Using `make` (simplest):
 ```bash
-pip install -r requirements.txt
-cd frontend && npm install && npm run build && cd ..
+make install     # Installs Python & Node dependencies
+make build       # Compiles React frontend into production assets
+make run         # Starts backend & opens the React UI in your browser
+make test        # Runs all test suites (UI, BDD, and Unit/Integration)
 ```
 
-### 2. Launch the Workspace (React SPA + Backend API)
-Run the single-command launcher:
+Alternatively, run manually:
 ```bash
+pip install -r requirements.txt
+npm --prefix frontend install && npm --prefix frontend run build
 python3 run.py
 ```
 This automatically seeds the database, launches the server, and opens your browser to **http://localhost:8000** (or visit **http://localhost:8000/docs** for the interactive Swagger API).
