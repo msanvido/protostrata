@@ -1,4 +1,4 @@
-.PHONY: help install build run dev test test-ui test-bdd test-unit demo clean
+.PHONY: help install build run dev test test-ui test-bdd test-unit eval optimize-prompts demo clean
 
 help:
 	@echo "======================================================================"
@@ -13,7 +13,8 @@ help:
 	@echo "  make test-ui    - Run React UI component & integration tests (Vitest)"
 	@echo "  make test-bdd   - Run Cucumber / Gherkin BDD acceptance tests"
 	@echo "  make test-unit  - Run Pytest unit and live LLM integration tests"
-	@echo "  make eval       - Run prompt evals, golden benchmarks & GEPA optimizer"
+	@echo "  make eval       - Run prompt evals, golden benchmarks & test suites"
+	@echo "  make optimize-prompts - Run offline GEPA evolutionary prompt optimizer (build/eval time)"
 	@echo "  make demo       - Run interactive terminal CLI compliance demonstration"
 	@echo "  make clean      - Clean caches, temporary database, and build outputs"
 	@echo "======================================================================"
@@ -44,6 +45,9 @@ test-unit:
 
 eval:
 	PYTHONPATH=. pytest -v tests/test_prompt_evals_and_gepa.py tests/test_live_llm_e2e.py
+
+optimize-prompts:
+	PYTHONPATH=. python3 -c "from strata.evals.gepa_optimizer import main; main()"
 
 demo:
 	PYTHONPATH=. python3 strata/cli.py

@@ -8,7 +8,7 @@ def main():
     parser = argparse.ArgumentParser(description="Strata Regulatory Operations & Intelligence Workspace")
     parser.add_argument("--llm", type=str, default="openrouter", help="LLM Provider: openrouter (default), gemini, anthropic, openai, ollama, or mock")
     parser.add_argument("--model", type=str, default="google/gemini-2.5-flash", help="Specific model ID (default: google/gemini-2.5-flash)")
-    parser.add_argument("--skip-evals", action="store_true", help="Skip running GEPA prompt evals loop")
+    parser.add_argument("--optimize-prompts", action="store_true", help="Optionally run GEPA evolutionary prompt optimizer (build/eval tool)")
     args = parser.parse_args()
 
     print("=" * 80)
@@ -78,10 +78,10 @@ def main():
     actions = svc.repo.list_actions()
     if actions:
         target_act = actions[0]
-        print(f"\n[4] Recording Human Override on Action '{target_act.id}' by Compliance Reviewer 'u_reviewer'...")
+        print(f"\n[4] Recording Human Override on Action '{target_act.id}' by Compliance Analyst 'u_compliance'...")
         updated = svc.record_human_override(
             action_id=target_act.id,
-            user_id="u_reviewer",
+            user_id="u_compliance",
             updated_action_text="Mandate automated CEMS diagnostic sweeps daily in addition to quarterly filings.",
             override_rationale="Strict state air quality oversight requires proactive telemetry audits."
         )
@@ -95,21 +95,8 @@ def main():
     for evt in dossier["reconstructed_timeline"][:4]:
         print(f"      [{evt['timestamp']}] {evt['actor']} -> {evt['event_type']}: {evt['summary']}")
 
-    # 6. Section 8.3 Prompt Optimization & Validation via Evals and GEPA
-    if not args.skip_evals:
-        print("\n[6] Executing Section 8.3: Prompt Evals & GEPA Evolutionary Optimizer...")
-        from strata.evals.gepa_optimizer import GEPAPromptOptimizer
-        optimizer = GEPAPromptOptimizer(population_size=4, generations=2, mutation_rate=0.4)
-        best_cand, best_metrics, history = optimizer.run_optimization()
-        print(f"    - Golden Dataset Evals Completed: {len(history)} Generations")
-        print(f"    - Best Prompt Fitness Score: {best_metrics.fitness_score:.4f}")
-        print(f"    - Verbatim Citation Veracity Rate: {best_metrics.citation_veracity_rate * 100:.1f}% (Hard Gate: {best_metrics.hard_gate_passed})")
-        print(f"    - Materiality Classification F1: {best_metrics.materiality_f1:.4f}")
-        print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
-        print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
-
-    # 7. Dynamic Project & Regulation Lifecycle with Baseline Analysis
-    print("\n[7] Dynamic Lifecycle: Adding New Project & Ingesting New Regulation Baseline...")
+    # 6. Dynamic Project & Regulation Lifecycle with Baseline Analysis
+    print("\n[6] Dynamic Lifecycle: Adding New Project & Ingesting New Regulation Baseline...")
     # Add new project
     from strata.models.entities import Project, ProceedingStatus
     new_proj = Project(
@@ -151,6 +138,19 @@ Owners must retain all perimeter inspection records on-site for five years.
     # Audit log verification
     proj_dossier = svc.event_store.generate_audit_dossier("project:PROJ-BESS-PEAKER-03")
     print(f"    - Reconstructed Audit Events for '{new_proj.id}': {proj_dossier['total_events']} events")
+
+    # Optional Prompt Optimization via GEPA (Build/Eval Time Only)
+    if args.optimize_prompts:
+        print("\n[Optional] Executing GEPA Evolutionary Prompt Optimizer...")
+        from strata.evals.gepa_optimizer import GEPAPromptOptimizer
+        optimizer = GEPAPromptOptimizer(population_size=4, generations=2, mutation_rate=0.4)
+        best_cand, best_metrics, history = optimizer.run_optimization()
+        print(f"    - Golden Dataset Evals Completed: {len(history)} Generations")
+        print(f"    - Best Prompt Fitness Score: {best_metrics.fitness_score:.4f}")
+        print(f"    - Verbatim Citation Veracity Rate: {best_metrics.citation_veracity_rate * 100:.1f}% (Hard Gate: {best_metrics.hard_gate_passed})")
+        print(f"    - Materiality Classification F1: {best_metrics.materiality_f1:.4f}")
+        print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
+        print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
 
     print("\n" + "=" * 80)
     print("STRATA MVP & FULL LIFECYCLE DEMONSTRATION COMPLETED SUCCESSFULLY.")
