@@ -573,23 +573,49 @@ cd frontend && npm test
 | **`components.test.tsx`** | 1. **Header**: Renders logo, status chip (`FINAL RULE`), LLM indicator, and tests proceeding toggle.<br>2. **OverviewTab**: Validates metric card counts, capital project summaries, and compliance obligations.<br>3. **ChangeDiffViewer**: Asserts dual-column comparative citations with exact character highlights.<br>4. **ActionInbox**: Validates action directives, owner badges, and urgency filtering (`ACT_NOW` vs `MONITOR`).<br>5. **HumanOverrideModal**: Verifies modal opening, input of revised directive and mandatory rationale, and commit handling.<br>6. **ExpertReviewQueue**: Verifies low-confidence escalation display, trigger signal chips (`SIG_AMBIG_TERM`), and resolution prompts.<br>7. **AuditTimelineStream**: Validates chronological event stream reconstruction and entity presets. |
 | **`App.test.tsx`** | 1. **Full Workspace Navigation**: Validates seamless tab switching between Dashboard, Changes, Actions, Expert Queue, and Audit Stream.<br>2. **Live Analysis Trigger**: Mocks API responses, executes "Run Live Analysis", verifies loading state, and confirms dynamic UI updates across all tabs. |
 
-### 8.4 Prompt Optimization & Validation via Evals and GEPA Optimizer
+### 8.4 LLM Usages, Evaluation Benchmarks & GEPA Optimizer
 
-To guarantee high model fidelity while preventing prompt drift or regression, prompt development across Strata's interpretation components (Materiality Classifier, Dual-Grounding Impact Matcher, Action Recommender) is executed via an automated, evaluation-driven optimization pipeline.
+To guarantee high model fidelity while preventing hallucination or prompt drift, every task delegated to an LLM in Strata is mapped to a programmatic evaluation benchmark with automated quality gates:
 
-#### 8.4.1 Golden Evaluation Benchmarks (`evals`)
-An offline golden evaluation dataset of regulatory delta pairs and enterprise asset context is maintained to benchmark model performance against deterministic criteria:
-1. **Materiality Classification Benchmark**:
-   - Curated pairs of regulatory paragraph changes annotated with ground-truth materiality (`MATERIAL` vs `IMMATERIAL`) and change type taxonomy.
-   - Evaluated on precision, recall, and F1-score across regulatory categories (deadlines, emission ceilings, monitoring rules).
-2. **Citation Veracity & Span Accuracy**:
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                STRATA LLM EVALUATION MATRIX                            │
+├──────────────────────────┬─────────────────────────────┬───────────────────────────────┤
+│ LLM Usage Area           │ Evaluation Benchmark Suite  │ Automated Gate & Pass Metric  │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ 1. Materiality & Taxonomy│ MATERIALITY_BENCHMARK_CASES │ F1 Score > 0.85 on Material;  │
+│    Classification        │ (6 curated FERC/EPA deltas) │ 100% accuracy on Deadlines    │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ 2. Citation Verbatim     │ CITATION_VERACITY_CASES     │ Hard Gate: 100% Exact         │
+│    Span Extraction       │ (Zero-paraphrase test set)  │ Substring Match (0 tolerance) │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ 3. Dual-Grounding Impact │ IMPACT_GROUNDING_CASES      │ 100% Precision on asset link; │
+│    Reasoning             │ (Project & Obligation pairs)│ Bidirectional quote fidelity  │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ 4. Action Recommendation │ Golden Action Templates     │ Urgency conformity (FINAL =   │
+│    Directive Drafting    │ (ActionRouter directives)   │ ACT_NOW); Owner accuracy      │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ 5. Prompt Architecture   │ GEPAPromptOptimizer         │ Multi-objective fitness > 0.8;│
+│    Evolution (GEPA)      │ (Multi-generational search) │ Automated pruning on failure  │
+├──────────────────────────┼─────────────────────────────┼───────────────────────────────┤
+│ 6. Live Multi-Provider   │ test_live_llm_e2e.py        │ Programmatic verification with│
+│    Inference (OpenRouter)│ (Live API calls over dockets│ real Gemini / Claude / GPT-4o │
+└──────────────────────────┴─────────────────────────────┴───────────────────────────────┘
+```
+
+#### 8.4.1 Golden Evaluation Benchmarks (`strata/evals/golden_dataset.py`)
+An offline golden evaluation dataset of regulatory delta pairs and enterprise asset context benchmarks model performance against deterministic criteria:
+1. **Materiality Classification Benchmark (`MATERIALITY_BENCHMARK_CASES`)**:
+   - Curated pairs of regulatory paragraph changes annotated with ground-truth materiality (`MATERIAL` vs `IMMATERIAL`) and change type taxonomy (`DEADLINE_SHIFT`, `NEW_REQUIREMENT`, `SCOPE_CHANGE`, `DEFINITION_CHANGE`).
+   - Evaluated on precision, recall, and F1-score across regulatory categories (study deadlines, emission ceilings, monitoring windows).
+2. **Citation Veracity & Span Accuracy Benchmark (`CITATION_VERACITY_CASES`)**:
    - Benchmarks whether the model quotes exact verbatim character spans or attempts loose paraphrasing.
-   - Target metric: $100\%$ programmatic substring verification pass rate.
-3. **Impact Mapping Grounding Benchmark**:
-   - Ground-truth mappings linking regulatory shifts to company obligations, measuring false discovery rate and dual-citation integrity.
+   - **Zero-Tolerance Hard Gate**: Programmatic substring verification. Any paraphrased or hallucinated quote immediately scores 0.0 and triggers `SIG_CITE_FAIL`.
+3. **Impact Mapping Grounding Benchmark (`IMPACT_GROUNDING_CASES`)**:
+   - Ground-truth mappings linking regulatory shifts to company obligations (e.g. FERC Order 2023 → Mojave Solar Inverter Ride-Through `OBL-RIDETHRU-03`), measuring false discovery rate and dual-citation integrity.
 
-#### 8.4.2 GEPA (Generative Evolutionary Prompt Architecture) Optimizer
-To systematically discover optimal prompt structures and few-shot exemplars without manual trial-and-error, Strata employs a **GEPA-based evolutionary prompt optimization loop**:
+#### 8.4.2 GEPA (Generative Evolutionary Prompt Architecture) Optimizer (`strata/evals/gepa_optimizer.py`)
+To systematically discover optimal prompt structures and few-shot exemplars without manual trial-and-error, Strata employs an evolutionary prompt optimization loop:
 
 ```
 ┌───────────────────────────┐      Mutate / Generate Candidates      ┌─────────────────────────────┐
@@ -614,6 +640,15 @@ To systematically discover optimal prompt structures and few-shot exemplars with
    - **Zero-Tolerance Hard Constraint**: Any prompt candidate generating a hallucinated or non-matching citation is immediately assigned a zero fitness score and pruned.
 3. **Continuous Deployment Gate**:
    - Optimized prompt variants must pass the full Cucumber BDD (`behave`) and Pytest test suites before being promoted to production runtime configurations.
+
+#### 8.4.3 Running the Evaluation & Evals Test Suite
+```bash
+# Run the complete golden evals and GEPA optimizer test suite
+PYTHONPATH=. pytest -v tests/test_prompt_evals_and_gepa.py
+
+# Run live end-to-end LLM evaluations using real OpenRouter / Gemini models
+PYTHONPATH=. pytest -v tests/test_live_llm_e2e.py
+```
 
 ---
 

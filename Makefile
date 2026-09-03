@@ -13,6 +13,7 @@ help:
 	@echo "  make test-ui    - Run React UI component & integration tests (Vitest)"
 	@echo "  make test-bdd   - Run Cucumber / Gherkin BDD acceptance tests"
 	@echo "  make test-unit  - Run Pytest unit and live LLM integration tests"
+	@echo "  make eval       - Run prompt evals, golden benchmarks & GEPA optimizer"
 	@echo "  make demo       - Run interactive terminal CLI compliance demonstration"
 	@echo "  make clean      - Clean caches, temporary database, and build outputs"
 	@echo "======================================================================"
@@ -40,6 +41,9 @@ test-bdd:
 
 test-unit:
 	PYTHONPATH=. pytest -v tests/
+
+eval:
+	PYTHONPATH=. pytest -v tests/test_prompt_evals_and_gepa.py tests/test_live_llm_e2e.py
 
 demo:
 	PYTHONPATH=. python3 strata/cli.py
