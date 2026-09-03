@@ -36,7 +36,21 @@ export interface ProceedingVersionSummary {
   version_label: string;
   status: string;
   filed_date?: string;
+  effective_date?: string;
   sections_count?: number;
+  raw_text?: string;
+  sections?: any[];
+}
+
+export interface InternalDocument {
+  id: string;
+  title: string;
+  doc_type: string;
+  owner_id: string;
+  current_version: number;
+  raw_text: string;
+  sections?: any[];
+  created_at?: string;
 }
 
 export interface Proceeding {

@@ -4,7 +4,8 @@ import type {
   Proceeding, 
   ActionRecommendation, 
   AnalysisResult, 
-  AuditDossier 
+  AuditDossier,
+  InternalDocument
 } from '../types';
 
 export const api = {
@@ -32,6 +33,12 @@ export const api = {
   async getObligations(): Promise<Obligation[]> {
     const res = await fetch('/obligations');
     if (!res.ok) throw new Error('Failed to fetch obligations');
+    return res.json();
+  },
+
+  async getDocuments(): Promise<InternalDocument[]> {
+    const res = await fetch('/documents');
+    if (!res.ok) throw new Error('Failed to fetch documents');
     return res.json();
   },
 

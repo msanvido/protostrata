@@ -107,6 +107,24 @@ const mockActions: ActionRecommendation[] = [
   }
 ];
 
+const mockDocuments = [
+  {
+    id: 'DOC-GT-AIR-01',
+    title: 'Gas Turbine Air Quality Operating Permit',
+    doc_type: 'PROCEDURE',
+    owner_id: 'u_ops_lead',
+    current_version: 1,
+    raw_text: 'Section 1: Operating Limits\nTurbine NOx must not exceed 2.5 ppmvd.',
+    sections: [
+      {
+        section_id: 'sec_1',
+        heading: 'Section 1: Operating Limits',
+        paragraphs: [{ para_id: 'p1', text: 'Turbine NOx must not exceed 2.5 ppmvd.' }]
+      }
+    ]
+  }
+];
+
 describe('UI Component Unit & Integration Tests', () => {
   it('renders Header with primary view mode switcher', () => {
     const handleModeChange = vi.fn();
@@ -202,6 +220,7 @@ describe('UI Component Unit & Integration Tests', () => {
     render(
       <ComplianceAnalystView
         proceedings={mockProceedings}
+        documents={mockDocuments}
         projects={mockProjects}
         obligations={mockObligations}
         changeRecords={mockChangeRecords}
@@ -223,7 +242,20 @@ describe('UI Component Unit & Integration Tests', () => {
 
     expect(screen.getByText(/Monitored Docket:/i)).toBeInTheDocument();
     expect(screen.getByText(/Run Live Analysis/i)).toBeInTheDocument();
-    expect(screen.getByText(/Downstream Impacts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Regulatory Versions & Documents/i)).toBeInTheDocument();
+    expect(screen.getByText('Gas Turbine Air Quality Operating Permit')).toBeInTheDocument();
+
+    // Test clicking View Full Text (Side Panel)
+    const viewFullTextBtns = screen.getAllByRole('button', { name: /View Full Text/i });
+    fireEvent.click(viewFullTextBtns[0]);
+
+    // Side panel should open
+    expect(screen.getByPlaceholderText(/Search within document text.../i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copy Text/i })).toBeInTheDocument();
+
+    // Close side panel
+    const closeBtn = screen.getByRole('button', { name: '×' });
+    fireEvent.click(closeBtn);
   });
 
   it('renders OverviewTab with metric counts and enterprise asset cards', () => {

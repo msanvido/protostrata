@@ -7,7 +7,8 @@ import type {
   ChangeRecord, 
   ActionRecommendation, 
   EscalatedItem, 
-  AuditDossier 
+  AuditDossier,
+  InternalDocument
 } from './types';
 
 import { Header } from './components/Header';
@@ -27,6 +28,7 @@ export const App: React.FC = () => {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [proceedings, setProceedings] = useState<Proceeding[]>([]);
+  const [documents, setDocuments] = useState<InternalDocument[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [changeRecords, setChangeRecords] = useState<ChangeRecord[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
@@ -47,16 +49,18 @@ export const App: React.FC = () => {
 
   const loadInitialContext = async () => {
     try {
-      const [projs, obls, acts, procs] = await Promise.all([
+      const [projs, obls, acts, procs, docs] = await Promise.all([
         api.getProjects(),
         api.getObligations(),
         api.getActions(),
-        api.getProceedings()
+        api.getProceedings(),
+        api.getDocuments()
       ]);
       setProjects(projs);
       setObligations(obls);
       setActions(acts);
       setProceedings(procs);
+      setDocuments(docs);
       if (projs.length > 0) {
         setSelectedProjectId(projs[0].id);
       }
@@ -192,6 +196,7 @@ export const App: React.FC = () => {
         {viewMode === 'compliance_analyst' && (
           <ComplianceAnalystView
             proceedings={proceedings}
+            documents={documents}
             projects={projects}
             obligations={obligations}
             changeRecords={changeRecords}

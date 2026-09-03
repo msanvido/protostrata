@@ -87,12 +87,21 @@ def list_proceedings():
                     "version_label": v.version_label,
                     "status": v.status.value if hasattr(v.status, 'value') else v.status,
                     "filed_date": str(v.filed_date) if v.filed_date else None,
-                    "sections_count": len(v.sections)
+                    "sections_count": len(v.sections),
+                    "raw_text": v.raw_text,
+                    "sections": [s.dict() if hasattr(s, 'dict') else s for s in v.sections]
                 }
                 for v in versions
             ]
             result.append(p)
         return result
+
+@app.get("/documents")
+def list_documents():
+    with service.db.get_connection() as conn:
+        rows = conn.execute("SELECT id FROM documents").fetchall()
+        docs = [service.repo.get_document(r["id"]) for r in rows]
+        return [d.dict() for d in docs if d]
 
 @app.post("/proceedings")
 def create_proceeding(req: CreateProceedingRequest):

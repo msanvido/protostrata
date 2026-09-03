@@ -120,8 +120,10 @@ Owns a specific compliance obligation, project workstream, or internal document 
     - Applicable regulations per project with current versions and bindingness status (`FINAL RULE - ACT NOW` vs `PROPOSED - MONITOR`).
     - Governing compliance obligations linked to the project.
     - Assigned action directives inbox with interactive lifecycle state transitions (**`Accept Directive`**, **`✓ Mark Done`**, **`Modify Directive`**).
-  - FR7.6.4: **Compliance Analyst View (`ComplianceAnalystView`)**:
+  - FR7.6.4: **Compliance Analyst View (`ComplianceAnalystView`) & Document Inspection**:
     - Docket portfolio workspace with filing status badges and live diff analysis trigger.
+    - **Regulatory Versions & Internal Documents Explorer**: Clear display of all ingested proceeding versions (drafts, NOPRs, final rules) and governing internal documents (policies, procedures, contracts, interconnection agreements).
+    - **Full-Text Side Panel Drawer**: Slide-over panel providing immediate inspection of the full unedited text of any regulation version or governing document, with canonical coordinate section jumping and search highlighting.
     - Downstream project impact mapping cross-referencing affected internal facilities and permits.
     - Side-by-side sequence alignment diff viewer with highlighted character offsets into immutable source snapshots.
     - Non-destructive human override modal capturing reviewer modifications and mandatory audit justifications.

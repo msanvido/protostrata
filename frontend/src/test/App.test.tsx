@@ -18,6 +18,7 @@ vi.mock('../api/client', () => ({
     deleteProject: vi.fn(),
     createProceeding: vi.fn(),
     deleteProceeding: vi.fn(),
+    getDocuments: vi.fn(),
   }
 }));
 
@@ -33,6 +34,24 @@ describe('Strata Full React App Integration Tests', () => {
         owner_id: 'u_ops_lead',
         status: 'ACTIVE',
         created_at: '2026-09-02'
+      }
+    ]);
+
+    vi.mocked(api.getDocuments).mockResolvedValue([
+      {
+        id: 'DOC-GT-AIR-01',
+        title: 'Gas Turbine Air Quality Operating Permit',
+        doc_type: 'PROCEDURE',
+        owner_id: 'u_ops_lead',
+        current_version: 1,
+        raw_text: 'Section 1: Operating Limits\nTurbine NOx must not exceed 2.5 ppmvd.',
+        sections: [
+          {
+            section_id: 'sec_1',
+            heading: 'Section 1: Operating Limits',
+            paragraphs: [{ para_id: 'p1', text: 'Turbine NOx must not exceed 2.5 ppmvd.' }]
+          }
+        ]
       }
     ]);
 
