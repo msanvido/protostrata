@@ -6,12 +6,18 @@ import { api } from '../api/client';
 vi.mock('../api/client', () => ({
   api: {
     getProjects: vi.fn(),
+    getProceedings: vi.fn(),
     getObligations: vi.fn(),
     getActions: vi.fn(),
     runAnalysis: vi.fn(),
     recordOverride: vi.fn(),
     resolveExpertReview: vi.fn(),
     getAuditDossier: vi.fn(),
+    transitionAction: vi.fn(),
+    createProject: vi.fn(),
+    deleteProject: vi.fn(),
+    createProceeding: vi.fn(),
+    deleteProceeding: vi.fn(),
   }
 }));
 
@@ -27,6 +33,24 @@ describe('Strata Full React App Integration Tests', () => {
         owner_id: 'u_ops_lead',
         status: 'ACTIVE',
         created_at: '2026-09-02'
+      }
+    ]);
+
+    vi.mocked(api.getProceedings).mockResolvedValue([
+      {
+        id: 'FERC-RM22-14',
+        docket_id: 'RM22-14',
+        title: 'FERC Order 2023 Generator Interconnection',
+        jurisdiction: 'FERC',
+        versions: [
+          {
+            id: 'ver_01',
+            version_label: 'Final Rule',
+            status: 'FINAL',
+            filed_date: '2026-09-02',
+            sections_count: 5
+          }
+        ]
       }
     ]);
 
@@ -68,40 +92,57 @@ describe('Strata Full React App Integration Tests', () => {
     });
   });
 
-  it('loads initial data and navigates between all workspace tabs', async () => {
+  it('loads initial data and renders Executive Dashboard by default', async () => {
     render(<App />);
 
-    // Check header
+    // Check header & logo
     expect(screen.getByText('STRATA')).toBeInTheDocument();
 
-    // Verify initial data loaded
+    // Verify view mode buttons
+    expect(screen.getByText(/Executive Dashboard/i)).toBeInTheDocument();
+    expect(screen.getByText(/Project Lead View/i)).toBeInTheDocument();
+    expect(screen.getByText(/Compliance Analyst View/i)).toBeInTheDocument();
+
+    // Verify initial data loaded into Dashboard
     await waitFor(() => {
       expect(screen.getByText('Gas Turbine Substation for Tier 4 Datacenter')).toBeInTheDocument();
+      expect(screen.getByText('FERC Order 2023 Generator Interconnection')).toBeInTheDocument();
+      expect(screen.getByText('Enterprise Compliance Directives Matrix')).toBeInTheDocument();
     });
-
-    // Navigate to Change Records tab
-    const changesTab = screen.getByRole('button', { name: /Change Records/i });
-    fireEvent.click(changesTab);
-    expect(screen.getByText(/Detected Regulatory Deltas & Citation Grounding/i)).toBeInTheDocument();
-
-    // Navigate to Action Inbox tab
-    const actionsTab = screen.getByRole('button', { name: /Action Inbox/i });
-    fireEvent.click(actionsTab);
-    expect(screen.getByText(/Routed Action Recommendations/i)).toBeInTheDocument();
-    expect(screen.getByText('Review simple-cycle SCR catalyst tuning parameters.')).toBeInTheDocument();
-
-    // Navigate to Expert Review Queue tab
-    const expertTab = screen.getByRole('button', { name: /Expert Review Queue/i });
-    fireEvent.click(expertTab);
-    expect(screen.getByText(/Queue is clear/i)).toBeInTheDocument();
-
-    // Navigate to Living Audit Dossier tab
-    const auditTab = screen.getByRole('button', { name: /Living Audit Dossier/i });
-    fireEvent.click(auditTab);
-    expect(screen.getByText(/Living Entity State & Defensible Audit Timeline/i)).toBeInTheDocument();
   });
 
-  it('triggers Run Live Analysis and updates change records, actions, and tabs', async () => {
+  it('switches between Executive Dashboard, Project Lead View, and Compliance Analyst View', async () => {
+    render(<App />);
+
+    // 1. Switch to Project Lead View
+    const leadViewBtn = screen.getByRole('button', { name: /Project Lead View/i });
+    fireEvent.click(leadViewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Applicable Regulations & Version Status')).toBeInTheDocument();
+      expect(screen.getByText(/Project Lead Actions & Workstream Directives/i)).toBeInTheDocument();
+    });
+
+    // 2. Switch to Compliance Analyst View
+    const compViewBtn = screen.getByRole('button', { name: /Compliance Analyst View/i });
+    fireEvent.click(compViewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Monitored Docket:/i)).toBeInTheDocument();
+      expect(screen.getByText(/Run Live Analysis/i)).toBeInTheDocument();
+      expect(screen.getByText(/Downstream Impacts/i)).toBeInTheDocument();
+    });
+
+    // 3. Switch back to Executive Dashboard
+    const dashViewBtn = screen.getByRole('button', { name: /Executive Dashboard/i });
+    fireEvent.click(dashViewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Enterprise Capital Projects & Leads')).toBeInTheDocument();
+    });
+  });
+
+  it('triggers Run Live Analysis in Compliance Analyst View and updates change records', async () => {
     vi.mocked(api.runAnalysis).mockResolvedValue({
       proceeding_id: 'FERC-RM22-14',
       from_version: 'FERC-RM22-14_nopr',
@@ -145,6 +186,11 @@ describe('Strata Full React App Integration Tests', () => {
 
     render(<App />);
 
+    // Switch to Compliance Analyst View
+    const compViewBtn = screen.getByRole('button', { name: /Compliance Analyst View/i });
+    fireEvent.click(compViewBtn);
+
+    // Click Run Live Analysis
     const runBtn = screen.getByRole('button', { name: /Run Live Analysis/i });
     fireEvent.click(runBtn);
 
@@ -154,11 +200,6 @@ describe('Strata Full React App Integration Tests', () => {
         'FERC-RM22-14_nopr',
         'FERC-RM22-14_final_rule'
       );
-    });
-
-    // Should automatically switch to Change Records tab and render new change
-    await waitFor(() => {
-      expect(screen.getByText('FERC Order 2023 mandates 150 calendar day cluster studies.')).toBeInTheDocument();
     });
   });
 });

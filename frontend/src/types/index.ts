@@ -31,11 +31,20 @@ export interface Obligation {
   created_at: string;
 }
 
+export interface ProceedingVersionSummary {
+  id: string;
+  version_label: string;
+  status: string;
+  filed_date?: string;
+  sections_count?: number;
+}
+
 export interface Proceeding {
   id: string;
   docket_id: string;
   title: string;
   jurisdiction: string;
+  versions?: ProceedingVersionSummary[];
 }
 
 export interface Citation {

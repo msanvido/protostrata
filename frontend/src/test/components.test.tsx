@@ -8,8 +8,12 @@ import { ActionInbox } from '../components/ActionInbox';
 import { HumanOverrideModal } from '../components/HumanOverrideModal';
 import { ExpertReviewQueue } from '../components/ExpertReviewQueue';
 import { AuditTimelineStream } from '../components/AuditTimelineStream';
+import { DashboardView } from '../components/DashboardView';
+import { ProjectLeadView } from '../components/ProjectLeadView';
+import { ComplianceAnalystView } from '../components/ComplianceAnalystView';
 import type { 
   Project, 
+  Proceeding,
   Obligation, 
   ChangeRecord, 
   ActionRecommendation, 
@@ -25,6 +29,24 @@ const mockProjects: Project[] = [
     owner_id: 'u_ops_lead',
     status: 'ACTIVE',
     created_at: '2026-09-02'
+  }
+];
+
+const mockProceedings: Proceeding[] = [
+  {
+    id: 'FERC-RM22-14',
+    docket_id: 'RM22-14',
+    title: 'FERC Order 2023 Generator Interconnection',
+    jurisdiction: 'FERC',
+    versions: [
+      {
+        id: 'ver_01',
+        version_label: 'Final Rule',
+        status: 'FINAL',
+        filed_date: '2026-09-02',
+        sections_count: 5
+      }
+    ]
   }
 ];
 
@@ -86,30 +108,122 @@ const mockActions: ActionRecommendation[] = [
 ];
 
 describe('UI Component Unit & Integration Tests', () => {
-  it('renders Header with proceeding selector and live LLM indicator', () => {
-    const handleProceeding = vi.fn();
-    const handleRun = vi.fn();
+  it('renders Header with primary view mode switcher', () => {
+    const handleModeChange = vi.fn();
 
     render(
       <Header
-        currentProceeding="FERC-RM22-14"
-        onProceedingChange={handleProceeding}
-        onRunAnalysis={handleRun}
-        isAnalyzing={false}
+        viewMode="dashboard"
+        onViewModeChange={handleModeChange}
       />
     );
 
     expect(screen.getByText('STRATA')).toBeInTheDocument();
-    expect(screen.getByText('FINAL RULE')).toBeInTheDocument();
+    expect(screen.getByText(/Executive Dashboard/i)).toBeInTheDocument();
+    expect(screen.getByText(/Project Lead View/i)).toBeInTheDocument();
+    expect(screen.getByText(/Compliance Analyst View/i)).toBeInTheDocument();
     expect(screen.getByText(/openrouter:gemini-2.5-flash/i)).toBeInTheDocument();
 
-    const runBtn = screen.getByText(/Run Live Analysis/i);
-    fireEvent.click(runBtn);
-    expect(handleRun).toHaveBeenCalledTimes(1);
+    const projLeadBtn = screen.getByText(/Project Lead View/i);
+    fireEvent.click(projLeadBtn);
+    expect(handleModeChange).toHaveBeenCalledWith('project_lead');
+  });
 
-    const select = screen.getByLabelText(/Proceeding:/i);
-    fireEvent.change(select, { target: { value: 'EPA-NSPS-KKKK' } });
-    expect(handleProceeding).toHaveBeenCalledWith('EPA-NSPS-KKKK');
+  it('renders DashboardView with projects, proceedings, and action directives matrix', () => {
+    const navLead = vi.fn();
+    const navComp = vi.fn();
+    const addProj = vi.fn();
+    const addReg = vi.fn();
+
+    render(
+      <DashboardView
+        projects={mockProjects}
+        proceedings={mockProceedings}
+        obligations={mockObligations}
+        actions={mockActions}
+        escalatedCount={1}
+        onNavigateProjectLead={navLead}
+        onNavigateCompliance={navComp}
+        onOpenNewProject={addProj}
+        onOpenNewRegulation={addReg}
+      />
+    );
+
+    expect(screen.getByText('Capital Projects')).toBeInTheDocument();
+    expect(screen.getByText('Tracked Dockets')).toBeInTheDocument();
+    expect(screen.getByText('Gas Turbine Substation for Tier 4 Datacenter')).toBeInTheDocument();
+    expect(screen.getByText('FERC Order 2023 Generator Interconnection')).toBeInTheDocument();
+    expect(screen.getByText('Enterprise Compliance Directives Matrix')).toBeInTheDocument();
+  });
+
+  it('renders ProjectLeadView with project switcher, applicable regulations, and action transition buttons', () => {
+    const handleSelectProj = vi.fn();
+    const handleTransition = vi.fn();
+    const handleOverride = vi.fn();
+    const handleAddProj = vi.fn();
+
+    render(
+      <ProjectLeadView
+        projects={mockProjects}
+        proceedings={mockProceedings}
+        obligations={mockObligations}
+        actions={mockActions}
+        selectedProjectId="PROJ-GT-DC-01"
+        onSelectProject={handleSelectProj}
+        onTransitionActionState={handleTransition}
+        onOpenOverride={handleOverride}
+        onOpenNewProject={handleAddProj}
+      />
+    );
+
+    expect(screen.getByText('Gas Turbine Substation for Tier 4 Datacenter')).toBeInTheDocument();
+    expect(screen.getByText('Applicable Regulations & Version Status')).toBeInTheDocument();
+    expect(screen.getByText(/Governing Compliance Obligations/i)).toBeInTheDocument();
+    expect(screen.getByText(/Project Lead Actions & Workstream Directives/i)).toBeInTheDocument();
+
+    const acceptBtns = screen.getAllByRole('button', { name: /Accept Directive/i });
+    fireEvent.click(acceptBtns[0]);
+    expect(handleTransition).toHaveBeenCalledWith('act_01', 'ACCEPTED');
+
+    const markDoneBtns = screen.getAllByRole('button', { name: /✓ Mark Done/i });
+    fireEvent.click(markDoneBtns[0]);
+    expect(handleTransition).toHaveBeenCalledWith('act_01', 'DONE');
+  });
+
+  it('renders ComplianceAnalystView with docket selector, downstream impacts, and subtabs', () => {
+    const handleProcChange = vi.fn();
+    const handleRunAnalysis = vi.fn();
+    const handleAddReg = vi.fn();
+    const handleOverride = vi.fn();
+    const handleTransition = vi.fn();
+    const handleResolve = vi.fn().mockResolvedValue(undefined);
+    const handleFetchDossier = vi.fn();
+
+    render(
+      <ComplianceAnalystView
+        proceedings={mockProceedings}
+        projects={mockProjects}
+        obligations={mockObligations}
+        changeRecords={mockChangeRecords}
+        actions={mockActions}
+        escalatedItems={[]}
+        dossier={null}
+        isDossierLoading={false}
+        currentProceeding="FERC-RM22-14"
+        isAnalyzing={false}
+        onProceedingChange={handleProcChange}
+        onRunAnalysis={handleRunAnalysis}
+        onOpenNewRegulation={handleAddReg}
+        onOpenOverride={handleOverride}
+        onTransitionActionState={handleTransition}
+        onResolveExpert={handleResolve}
+        onFetchDossier={handleFetchDossier}
+      />
+    );
+
+    expect(screen.getByText(/Monitored Docket:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Run Live Analysis/i)).toBeInTheDocument();
+    expect(screen.getByText(/Downstream Impacts/i)).toBeInTheDocument();
   });
 
   it('renders OverviewTab with metric counts and enterprise asset cards', () => {

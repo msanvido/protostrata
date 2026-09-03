@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from './api/client';
 import type { 
   Project, 
+  Proceeding,
   Obligation, 
   ChangeRecord, 
   ActionRecommendation, 
@@ -10,20 +11,22 @@ import type {
 } from './types';
 
 import { Header } from './components/Header';
-import { OverviewTab } from './components/OverviewTab';
-import { ChangeDiffViewer } from './components/ChangeDiffViewer';
-import { ActionInbox } from './components/ActionInbox';
-import { ExpertReviewQueue } from './components/ExpertReviewQueue';
-import { AuditTimelineStream } from './components/AuditTimelineStream';
+import { DashboardView } from './components/DashboardView';
+import { ProjectLeadView } from './components/ProjectLeadView';
+import { ComplianceAnalystView } from './components/ComplianceAnalystView';
 import { HumanOverrideModal } from './components/HumanOverrideModal';
 import { NewProjectModal } from './components/NewProjectModal';
 import { NewRegulationModal } from './components/NewRegulationModal';
 
 export const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'changes' | 'actions' | 'expert' | 'audit'>('overview');
+  // Primary View Mode: Dashboard vs Project Lead vs Compliance Analyst
+  const [viewMode, setViewMode] = useState<'dashboard' | 'project_lead' | 'compliance_analyst'>('dashboard');
+
   const [currentProceeding, setCurrentProceeding] = useState<string>('FERC-RM22-14');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('PROJ-SOLAR-DESERT-02');
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [proceedings, setProceedings] = useState<Proceeding[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
   const [changeRecords, setChangeRecords] = useState<ChangeRecord[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
@@ -44,14 +47,19 @@ export const App: React.FC = () => {
 
   const loadInitialContext = async () => {
     try {
-      const [projs, obls, acts] = await Promise.all([
+      const [projs, obls, acts, procs] = await Promise.all([
         api.getProjects(),
         api.getObligations(),
-        api.getActions()
+        api.getActions(),
+        api.getProceedings()
       ]);
       setProjects(projs);
       setObligations(obls);
       setActions(acts);
+      setProceedings(procs);
+      if (projs.length > 0) {
+        setSelectedProjectId(projs[0].id);
+      }
 
       // Load initial dossier
       fetchAuditDossier('obligation:OBL-CEMS-02');
@@ -72,13 +80,6 @@ export const App: React.FC = () => {
       setActions(result.actions || []);
       setEscalatedItems(result.escalated_items || []);
 
-      // If EPA, switch to expert review or changes
-      if (result.escalated_items && result.escalated_items.length > 0) {
-        setActiveTab('expert');
-      } else {
-        setActiveTab('changes');
-      }
-
       // Refresh default dossier
       fetchAuditDossier(currentProceeding === 'FERC-RM22-14' ? 'obligation:OBL-RIDETHRU-03' : 'obligation:OBL-CEMS-02');
     } catch (err) {
@@ -90,10 +91,8 @@ export const App: React.FC = () => {
 
   const handleRecordOverride = async (actionId: string, updatedText: string, rationale: string) => {
     await api.recordOverride(actionId, 'u_reviewer', updatedText, rationale);
-    // Refresh actions
     const refreshed = await api.getActions();
     setActions(refreshed);
-    // Refresh active dossier
     if (dossier) {
       fetchAuditDossier(dossier.stream_id);
     }
@@ -101,12 +100,8 @@ export const App: React.FC = () => {
 
   const handleTransitionAction = async (actionId: string, newState: string) => {
     try {
-      await api.transitionAction(actionId, 'u_ops_lead', newState);
-      const refreshed = await api.getActions();
-      setActions(refreshed);
-      if (dossier) {
-        fetchAuditDossier(dossier.stream_id);
-      }
+      const updated = await api.transitionAction(actionId, newState, 'u_user');
+      setActions(prev => prev.map(a => a.id === actionId ? updated : a));
     } catch (err) {
       console.error('Failed to transition action:', err);
     }
@@ -114,7 +109,6 @@ export const App: React.FC = () => {
 
   const handleResolveExpert = async (targetId: string, decision: string, rationale: string) => {
     await api.resolveExpertReview(targetId, 'u_counsel', decision, rationale);
-    // Refresh analysis
     handleRunAnalysis();
   };
 
@@ -134,118 +128,85 @@ export const App: React.FC = () => {
     await api.createProject(project);
     const refreshed = await api.getProjects();
     setProjects(refreshed);
+    if (project.id) setSelectedProjectId(project.id);
     fetchAuditDossier(`project:${project.id}`);
-  };
-
-  const handleDeleteProject = async (projectId: string) => {
-    await api.deleteProject(projectId);
-    const refreshed = await api.getProjects();
-    setProjects(refreshed);
   };
 
   const handleCreateProceeding = async (data: any) => {
     const res = await api.createProceeding(data);
+    const procs = await api.getProceedings();
+    setProceedings(procs);
     setCurrentProceeding(data.id);
     if (res.analysis) {
       setChangeRecords(res.analysis.change_records || []);
       setActions(res.analysis.actions || []);
       setEscalatedItems(res.analysis.escalated_items || []);
-      setActiveTab('changes');
     }
     fetchAuditDossier(`proceeding:${data.id}`);
   };
 
   return (
     <div className="app-shell">
+      {/* Universal Header with View Switcher */}
       <Header
-        currentProceeding={currentProceeding}
-        onProceedingChange={setCurrentProceeding}
-        onRunAnalysis={handleRunAnalysis}
-        isAnalyzing={isAnalyzing}
-        onOpenNewRegulation={() => setIsNewRegulationModalOpen(true)}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
       />
 
-      {/* Navigation Tabs */}
-      <nav className="app-nav">
-        <div className="nav-tabs">
-          <button
-            className={`nav-tab ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            Dashboard & Overview
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'changes' ? 'active' : ''}`}
-            onClick={() => setActiveTab('changes')}
-          >
-            Change Records{' '}
-            <span className="tab-pill">{changeRecords.length}</span>
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'actions' ? 'active' : ''}`}
-            onClick={() => setActiveTab('actions')}
-          >
-            Action Inbox{' '}
-            <span className="tab-pill">{actions.length}</span>
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'expert' ? 'active' : ''}`}
-            onClick={() => setActiveTab('expert')}
-          >
-            Expert Review Queue{' '}
-            <span className={`tab-pill ${escalatedItems.length > 0 ? 'alert' : ''}`}>
-              {escalatedItems.length}
-            </span>
-          </button>
-          <button
-            className={`nav-tab ${activeTab === 'audit' ? 'active' : ''}`}
-            onClick={() => setActiveTab('audit')}
-          >
-            Living Audit Dossier
-          </button>
-        </div>
+      {/* Main Content Area Routed by Persona / View */}
+      <main className="app-main" style={{ padding: '1.5rem 2rem' }}>
+        {viewMode === 'dashboard' && (
+          <DashboardView
+            projects={projects}
+            proceedings={proceedings}
+            obligations={obligations}
+            actions={actions}
+            escalatedCount={escalatedItems.length}
+            onNavigateProjectLead={(projId) => {
+              if (projId) setSelectedProjectId(projId);
+              setViewMode('project_lead');
+            }}
+            onNavigateCompliance={(procId) => {
+              if (procId) setCurrentProceeding(procId);
+              setViewMode('compliance_analyst');
+            }}
+            onOpenNewProject={() => setIsNewProjectModalOpen(true)}
+            onOpenNewRegulation={() => setIsNewRegulationModalOpen(true)}
+          />
+        )}
 
-        <div className="nav-meta">
-          Enterprise Context: <strong>{projects.length} Projects · {obligations.length} Obligations</strong>
-        </div>
-      </nav>
+        {viewMode === 'project_lead' && (
+          <ProjectLeadView
+            projects={projects}
+            proceedings={proceedings}
+            obligations={obligations}
+            actions={actions}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={setSelectedProjectId}
+            onTransitionActionState={handleTransitionAction}
+            onOpenOverride={(action) => setOverrideAction(action)}
+            onOpenNewProject={() => setIsNewProjectModalOpen(true)}
+          />
+        )}
 
-      {/* Main Content Area */}
-      <main className="app-main">
-        {activeTab === 'overview' && (
-          <OverviewTab
+        {viewMode === 'compliance_analyst' && (
+          <ComplianceAnalystView
+            proceedings={proceedings}
             projects={projects}
             obligations={obligations}
-            materialChangesCount={changeRecords.filter(c => c.materiality === 'MATERIAL').length}
-            escalatedCount={escalatedItems.length}
-            onOpenNewProject={() => setIsNewProjectModalOpen(true)}
-            onDeleteProject={handleDeleteProject}
-          />
-        )}
-
-        {activeTab === 'changes' && (
-          <ChangeDiffViewer changeRecords={changeRecords} />
-        )}
-
-        {activeTab === 'actions' && (
-          <ActionInbox
+            changeRecords={changeRecords}
             actions={actions}
-            onOpenOverride={(action) => setOverrideAction(action)}
-            onTransitionState={handleTransitionAction}
-          />
-        )}
-
-        {activeTab === 'expert' && (
-          <ExpertReviewQueue
             escalatedItems={escalatedItems}
-            onResolve={handleResolveExpert}
-          />
-        )}
-
-        {activeTab === 'audit' && (
-          <AuditTimelineStream
             dossier={dossier}
-            isLoading={isDossierLoading}
+            isDossierLoading={isDossierLoading}
+            currentProceeding={currentProceeding}
+            isAnalyzing={isAnalyzing}
+            onProceedingChange={setCurrentProceeding}
+            onRunAnalysis={handleRunAnalysis}
+            onOpenNewRegulation={() => setIsNewRegulationModalOpen(true)}
+            onOpenOverride={(action) => setOverrideAction(action)}
+            onTransitionActionState={handleTransitionAction}
+            onResolveExpert={handleResolveExpert}
             onFetchDossier={fetchAuditDossier}
           />
         )}

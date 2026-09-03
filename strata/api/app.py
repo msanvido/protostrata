@@ -77,7 +77,22 @@ class CreateProceedingRequest(BaseModel):
 def list_proceedings():
     with service.db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM proceedings").fetchall()
-        return [dict(r) for r in rows]
+        result = []
+        for r in rows:
+            p = dict(r)
+            versions = service.repo.get_proceeding_versions(p["id"])
+            p["versions"] = [
+                {
+                    "id": v.id,
+                    "version_label": v.version_label,
+                    "status": v.status.value if hasattr(v.status, 'value') else v.status,
+                    "filed_date": str(v.filed_date) if v.filed_date else None,
+                    "sections_count": len(v.sections)
+                }
+                for v in versions
+            ]
+            result.append(p)
+        return result
 
 @app.post("/proceedings")
 def create_proceeding(req: CreateProceedingRequest):
