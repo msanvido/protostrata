@@ -156,6 +156,26 @@ class StrataRepository:
                 ))
             return results
 
+    def delete_proceeding(self, proc_id: str) -> bool:
+        with self.db.get_connection() as conn:
+            conn.execute(
+                """DELETE FROM actions WHERE mapping_id IN (
+                    SELECT id FROM impact_mappings WHERE change_id IN (
+                        SELECT id FROM change_records WHERE proceeding_id = ?
+                    )
+                )""", (proc_id,)
+            )
+            conn.execute(
+                """DELETE FROM impact_mappings WHERE change_id IN (
+                    SELECT id FROM change_records WHERE proceeding_id = ?
+                )""", (proc_id,)
+            )
+            conn.execute("DELETE FROM change_records WHERE proceeding_id = ?", (proc_id,))
+            conn.execute("DELETE FROM proceeding_versions WHERE proceeding_id = ?", (proc_id,))
+            cursor = conn.execute("DELETE FROM proceedings WHERE id = ?", (proc_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+
     # --- Projects ---
     def create_project(self, proj: Project) -> Project:
         with self.db.get_connection() as conn:
@@ -168,6 +188,13 @@ class StrataRepository:
                 conn.execute("INSERT OR IGNORE INTO project_obligations (project_id, obligation_id) VALUES (?, ?)", (proj.id, obl_id))
             conn.commit()
         return proj
+
+    def delete_project(self, proj_id: str) -> bool:
+        with self.db.get_connection() as conn:
+            conn.execute("DELETE FROM project_obligations WHERE project_id = ?", (proj_id,))
+            cursor = conn.execute("DELETE FROM projects WHERE id = ?", (proj_id,))
+            conn.commit()
+            return cursor.rowcount > 0
 
     def get_project(self, proj_id: str) -> Optional[Project]:
         with self.db.get_connection() as conn:

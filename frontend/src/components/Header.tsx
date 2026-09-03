@@ -5,6 +5,7 @@ interface HeaderProps {
   onProceedingChange: (val: string) => void;
   onRunAnalysis: () => void;
   isAnalyzing: boolean;
+  onOpenNewRegulation?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -12,6 +13,7 @@ export const Header: React.FC<HeaderProps> = ({
   onProceedingChange,
   onRunAnalysis,
   isAnalyzing,
+  onOpenNewRegulation,
 }) => {
   return (
     <header className="app-header">
@@ -31,8 +33,20 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <option value="FERC-RM22-14">FERC RM22-14 / Order 2023 (Interconnection)</option>
             <option value="EPA-NSPS-KKKK">EPA NSPS Subpart KKKK (Combustion Turbines)</option>
+            {currentProceeding !== 'FERC-RM22-14' && currentProceeding !== 'EPA-NSPS-KKKK' && (
+              <option value={currentProceeding}>{currentProceeding} (Custom Docket)</option>
+            )}
           </select>
           <span className="badge badge-final">FINAL RULE</span>
+          {onOpenNewRegulation && (
+            <button
+              className="btn btn-secondary btn-sm"
+              style={{ marginLeft: '0.5rem' }}
+              onClick={onOpenNewRegulation}
+            >
+              + Ingest Docket
+            </button>
+          )}
         </div>
       </div>
       <div className="header-actions">

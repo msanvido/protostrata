@@ -55,17 +55,88 @@ def get_ui():
 def health():
     return {"status": "ok", "service": "Strata MVP"}
 
+class CreateProjectRequest(BaseModel):
+    id: str
+    name: str
+    description: str
+    owner_id: str
+    status: str = "ACTIVE"
+    linked_obligations: List[str] = []
+
+class CreateProceedingRequest(BaseModel):
+    id: str
+    docket_id: str
+    title: str
+    jurisdiction: str = "FERC"
+    version_label: str = "Initial Filing"
+    raw_text: str
+    status: str = "PROPOSED"
+    auto_analyze: bool = True
+
 @app.get("/proceedings")
 def list_proceedings():
     with service.db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM proceedings").fetchall()
         return [dict(r) for r in rows]
 
+@app.post("/proceedings")
+def create_proceeding(req: CreateProceedingRequest):
+    try:
+        from strata.models.entities import ProceedingStatus
+        status_enum = ProceedingStatus(req.status)
+        proc, ver = service.create_proceeding(
+            proceeding_id=req.id,
+            docket_id=req.docket_id,
+            title=req.title,
+            jurisdiction=req.jurisdiction,
+            version_label=req.version_label,
+            raw_text=req.raw_text,
+            status=status_enum
+        )
+        result = {"proceeding": proc.dict(), "version": ver.dict()}
+        if req.auto_analyze and req.raw_text:
+            analysis = service.analyze_new_regulation(req.id, ver.id)
+            result["analysis"] = analysis
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/proceedings/{proceeding_id}")
+def delete_proceeding(proceeding_id: str, user_id: str = "u_admin"):
+    success = service.delete_proceeding(proceeding_id, user_id=user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Proceeding not found")
+    return {"deleted": True, "id": proceeding_id}
+
 @app.get("/projects")
 def list_projects():
     with service.db.get_connection() as conn:
         rows = conn.execute("SELECT * FROM projects").fetchall()
         return [dict(r) for r in rows]
+
+@app.post("/projects")
+def create_project(req: CreateProjectRequest, user_id: str = "u_admin"):
+    try:
+        from strata.models.entities import Project
+        proj = Project(
+            id=req.id,
+            name=req.name,
+            description=req.description,
+            owner_id=req.owner_id,
+            status=req.status,
+            linked_obligations=req.linked_obligations
+        )
+        created = service.create_project(proj, creator_id=user_id)
+        return created.dict()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.delete("/projects/{project_id}")
+def delete_project(project_id: str, user_id: str = "u_admin"):
+    success = service.delete_project(project_id, user_id=user_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return {"deleted": True, "id": project_id}
 
 @app.get("/obligations")
 def list_obligations():

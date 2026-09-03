@@ -6,6 +6,8 @@ interface OverviewTabProps {
   obligations: Obligation[];
   materialChangesCount: number;
   escalatedCount: number;
+  onOpenNewProject?: () => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -13,6 +15,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   obligations,
   materialChangesCount,
   escalatedCount,
+  onOpenNewProject,
+  onDeleteProject,
 }) => {
   return (
     <div>
@@ -20,7 +24,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         <div className="card stat-card">
           <div className="stat-title">Active Projects</div>
           <div className="stat-number">{projects.length}</div>
-          <div className="stat-desc">Gas Turbine DC Substation & Mojave Solar Array</div>
+          <div className="stat-desc">Monitored capital assets & generation facilities</div>
         </div>
         <div className="card stat-card">
           <div className="stat-title">Governing Obligations</div>
@@ -44,8 +48,13 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
       <div className="grid-split">
         {/* Projects List */}
         <div className="card">
-          <div className="card-header">
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h3>Enterprise Capital Projects</h3>
+            {onOpenNewProject && (
+              <button className="btn btn-primary btn-sm" onClick={onOpenNewProject}>
+                + Add Project
+              </button>
+            )}
           </div>
           <div>
             {projects.map((p) => (
@@ -57,7 +66,19 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
                       {p.id} · Owner: {p.owner_id}
                     </div>
                   </div>
-                  <span className="badge badge-final">{p.status}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="badge badge-final">{p.status}</span>
+                    {onDeleteProject && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ color: '#ef4444', padding: '2px 8px', fontSize: '0.75rem' }}
+                        title="Delete Project"
+                        onClick={() => onDeleteProject(p.id)}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p style={{ fontSize: '0.82rem', color: '#9ca3af', marginTop: '0.45rem' }}>
                   {p.description}

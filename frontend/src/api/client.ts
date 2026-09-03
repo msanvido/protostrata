@@ -14,6 +14,21 @@ export const api = {
     return res.json();
   },
 
+  async createProject(project: Partial<Project>): Promise<Project> {
+    const res = await fetch('/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(project)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async deleteProject(projectId: string): Promise<void> {
+    const res = await fetch(`/projects/${projectId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
+  },
+
   async getObligations(): Promise<Obligation[]> {
     const res = await fetch('/obligations');
     if (!res.ok) throw new Error('Failed to fetch obligations');
@@ -24,6 +39,30 @@ export const api = {
     const res = await fetch('/proceedings');
     if (!res.ok) throw new Error('Failed to fetch proceedings');
     return res.json();
+  },
+
+  async createProceeding(data: {
+    id: string;
+    docket_id: string;
+    title: string;
+    jurisdiction: string;
+    version_label: string;
+    raw_text: string;
+    status: string;
+    auto_analyze?: boolean;
+  }): Promise<any> {
+    const res = await fetch('/proceedings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async deleteProceeding(proceedingId: string): Promise<void> {
+    const res = await fetch(`/proceedings/${proceedingId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await res.text());
   },
 
   async getActions(ownerId?: string, state?: string): Promise<ActionRecommendation[]> {

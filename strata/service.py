@@ -149,19 +149,224 @@ class StrataService:
 
     def ingest_project(self, proj_id: str, name: str, description: str, owner_id: str, linked_obligations: List[str] = None) -> Project:
         proj = Project(id=proj_id, name=name, description=description, owner_id=owner_id, linked_obligations=linked_obligations or [])
-        self.repo.create_project(proj)
+        return self.create_project(proj, creator_id="pipeline:seed")
 
+    def create_project(self, proj: Project, creator_id: str = "u_admin") -> Project:
+        """Creates a new project, indexes it into vector search, and records an audit event."""
+        if not self.repo.get_user(proj.owner_id):
+            self.repo.create_user(User(id=proj.owner_id, name=proj.owner_id, email=f"{proj.owner_id}@enterprise.internal", role=UserRole.ASSIGNEE))
+        created = self.repo.create_project(proj)
         self.vector_store.add_document(
-            item_id=f"proj_{proj_id}",
+            item_id=f"proj_{proj.id}",
             entity_type="PROJECT",
-            entity_id=proj_id,
-            text=f"Project {name}: {description}",
-            metadata={"project_id": proj_id, "owner_id": owner_id}
+            entity_id=proj.id,
+            text=f"Project {proj.name}: {proj.description}",
+            metadata={"project_id": proj.id, "owner_id": proj.owner_id}
         )
-        return proj
+        self.event_store.append_event(AuditEvent(
+            stream_id=f"project:{proj.id}",
+            event_type=AuditEventType.PROJECT_CREATED,
+            actor_type=ActorType.USER,
+            actor_id=creator_id,
+            payload={
+                "project_id": proj.id,
+                "name": proj.name,
+                "owner_id": proj.owner_id,
+                "status": proj.status,
+                "summary": f"Project '{proj.name}' ({proj.id}) created and assigned to {proj.owner_id}."
+            }
+        ))
+        return created
+
+    def delete_project(self, proj_id: str, user_id: str = "u_admin") -> bool:
+        """Deletes a project and logs an immutable audit event."""
+        proj = self.repo.get_project(proj_id)
+        name = proj.name if proj else proj_id
+        success = self.repo.delete_project(proj_id)
+        if success:
+            self.event_store.append_event(AuditEvent(
+                stream_id=f"project:{proj_id}",
+                event_type=AuditEventType.PROJECT_DELETED,
+                actor_type=ActorType.USER,
+                actor_id=user_id,
+                payload={
+                    "project_id": proj_id,
+                    "name": name,
+                    "summary": f"Project '{name}' ({proj_id}) deleted by {user_id}."
+                }
+            ))
+        return success
+
+    def create_proceeding(
+        self,
+        proceeding_id: str,
+        docket_id: str,
+        title: str,
+        jurisdiction: str = "FERC",
+        version_label: str = "Initial Docket Text",
+        raw_text: str = "",
+        status: ProceedingStatus = ProceedingStatus.PROPOSED,
+        user_id: str = "u_admin"
+    ) -> Tuple[Proceeding, ProceedingVersion]:
+        """Creates a new regulatory proceeding and ingests its initial version with full coordinate segmentation."""
+        proc = self.repo.create_proceeding(Proceeding(
+            id=proceeding_id, docket_id=docket_id, title=title, jurisdiction=jurisdiction
+        ))
+        
+        sections = DocumentSegmenter.segment(raw_text) if raw_text else []
+        version_id = f"{proceeding_id}_{version_label.lower().replace(' ', '_').replace('-', '_')}"
+        version = ProceedingVersion(
+            id=version_id,
+            proceeding_id=proceeding_id,
+            version_label=version_label,
+            status=status,
+            filed_date="2026-09-03",
+            raw_text=raw_text,
+            sections=sections
+        )
+        self.repo.create_proceeding_version(version)
+
+        for sec in sections:
+            for p in sec.paragraphs:
+                self.vector_store.add_document(
+                    item_id=f"{proceeding_id}_{sec.section_id}_{p.para_id}",
+                    entity_type="PROCEEDING_PARA",
+                    entity_id=proceeding_id,
+                    text=f"{sec.heading}: {p.text}",
+                    metadata={"version_id": version.id, "section_id": sec.section_id, "para_id": p.para_id}
+                )
+
+        self.event_store.append_event(AuditEvent(
+            stream_id=f"proceeding:{proceeding_id}",
+            event_type=AuditEventType.PROCEEDING_CREATED,
+            actor_type=ActorType.USER,
+            actor_id=user_id,
+            payload={
+                "proceeding_id": proceeding_id,
+                "docket_id": docket_id,
+                "title": title,
+                "jurisdiction": jurisdiction,
+                "summary": f"Regulatory docket '{title}' ({docket_id}) created by {user_id}."
+            }
+        ))
+        return proc, version
+
+    def delete_proceeding(self, proc_id: str, user_id: str = "u_admin") -> bool:
+        """Deletes a regulatory proceeding and records an audit event."""
+        proc = self.repo.get_proceeding(proc_id)
+        title = proc.title if proc else proc_id
+        success = self.repo.delete_proceeding(proc_id)
+        if success:
+            self.event_store.append_event(AuditEvent(
+                stream_id=f"proceeding:{proc_id}",
+                event_type=AuditEventType.PROCEEDING_DELETED,
+                actor_type=ActorType.USER,
+                actor_id=user_id,
+                payload={
+                    "proceeding_id": proc_id,
+                    "title": title,
+                    "summary": f"Regulatory proceeding '{title}' ({proc_id}) deleted by {user_id}."
+                }
+            ))
+        return success
+
+    def analyze_new_regulation(self, proceeding_id: str, version_id: str) -> Dict[str, Any]:
+        """Performs baseline analysis for a brand new regulation where all sections are new additions."""
+        curr_ver = self.repo.get_proceeding_version(version_id)
+        if not curr_ver:
+            raise ValueError(f"Proceeding version not found: {version_id}")
+
+        curr_paras = DiffEngine._flatten_paragraphs(curr_ver)
+        diff_pairs = [{"diff_type": "ADDED", "prev_para": None, "curr_para": p} for p in curr_paras]
+
+        change_records: List[ChangeRecord] = []
+        for pair in diff_pairs:
+            rec = ChangeClassifier.classify_diff_pair(pair, proceeding_id, curr_ver, curr_ver, llm_client=self.llm_client)
+            if rec.after_citation and rec.after_citation.quoted_text:
+                is_valid, reason = CitationValidator.validate_citation(rec.after_citation, curr_ver)
+                if not is_valid:
+                    rec.confidence = ConfidenceTier.LOW
+                    rec.confidence_signals.append(f"SIG_CITE_FAIL: {reason}")
+            
+            self.repo.create_change_record(rec)
+            change_records.append(rec)
+            self.event_store.append_event(AuditEvent(
+                stream_id=f"proceeding:{proceeding_id}",
+                event_type=AuditEventType.CHANGE_DETECTED,
+                actor_type=ActorType.SYSTEM,
+                actor_id="pipeline:baseline_analyzer",
+                payload={"change_id": rec.id, "type": rec.change_type.value, "materiality": rec.materiality.value, "summary": rec.description, "confidence": rec.confidence.value}
+            ))
+
+        all_obls = self.repo.list_obligations()
+        all_projs = [self.repo.get_project(r["id"]) for r in self.db.get_connection().execute("SELECT id FROM projects").fetchall()]
+        all_docs = [self.repo.get_document(r["id"]) for r in self.db.get_connection().execute("SELECT id FROM documents").fetchall()]
+
+        owner_lookup = {o.id: o.owner_id for o in all_obls}
+        owner_lookup.update({p.id: p.owner_id for p in all_projs})
+        owner_lookup.update({d.id: d.owner_id for d in all_docs})
+
+        impact_mappings: List[ImpactMapping] = []
+        action_recommendations: List[ActionRecommendation] = []
+        escalated_items: List[Dict[str, Any]] = []
+
+        for cr in change_records:
+            if cr.materiality != "MATERIAL":
+                continue
+
+            mappings = self.impact_mapper.map_change_impact(cr, all_obls, all_projs, all_docs)
+            for m in mappings:
+                self.repo.create_impact_mapping(m)
+                impact_mappings.append(m)
+
+                stream_id = f"obligation:{m.affected_id}" if m.affected_type == "OBLIGATION" else f"project:{m.affected_id}"
+                self.event_store.append_event(AuditEvent(
+                    stream_id=stream_id,
+                    event_type=AuditEventType.IMPACT_MAPPED,
+                    actor_type=ActorType.SYSTEM,
+                    actor_id="pipeline:impact_mapper",
+                    payload={"mapping_id": m.id, "change_id": cr.id, "affected_id": m.affected_id, "rationale": m.rationale, "summary": f"Impact mapped to {m.affected_id}."}
+                ))
+
+                if ConfidenceRubric.should_escalate_to_expert_review(m.confidence):
+                    escalated_items.append({"change": cr.dict(), "mapping": m.dict(), "signals": m.confidence_signals})
+                    self.event_store.append_event(AuditEvent(
+                        stream_id=stream_id,
+                        event_type=AuditEventType.ACTION_ESCALATED_TO_EXPERT,
+                        actor_type=ActorType.SYSTEM,
+                        actor_id="pipeline:confidence_rubric",
+                        payload={"mapping_id": m.id, "signals": m.confidence_signals, "summary": f"Escalated to Expert Review: {'; '.join(m.confidence_signals)}"}
+                    ))
+                else:
+                    action = ActionRouter.generate_and_route(m, curr_ver.status, cr.change_type.value, owner_lookup)
+                    self.repo.create_action(action)
+                    action_recommendations.append(action)
+                    self.event_store.append_event(AuditEvent(
+                        stream_id=stream_id,
+                        event_type=AuditEventType.ACTION_RECOMMENDED,
+                        actor_type=ActorType.SYSTEM,
+                        actor_id="pipeline:action_router",
+                        payload={"action_id": action.id, "mapping_id": m.id, "owner_id": action.suggested_owner_id, "urgency": action.urgency.value, "summary": action.recommended_action}
+                    ))
+
+        return {
+            "proceeding_id": proceeding_id,
+            "from_version": None,
+            "to_version": version_id,
+            "total_changes": len(change_records),
+            "material_changes": len([c for c in change_records if c.materiality == "MATERIAL"]),
+            "impact_mappings": len(impact_mappings),
+            "actions_created": len(action_recommendations),
+            "escalated_to_expert_review": len(escalated_items),
+            "change_records": [c.dict() for c in change_records],
+            "actions": [a.dict() for a in action_recommendations],
+            "escalated_items": escalated_items
+        }
 
     # --- Change Detection & Processing Pipeline ---
     def analyze_versions(self, proceeding_id: str, prev_version_id: str, curr_version_id: str) -> Dict[str, Any]:
+        if not prev_version_id or prev_version_id == "none" or prev_version_id == curr_version_id:
+            return self.analyze_new_regulation(proceeding_id, curr_version_id)
         prev_ver = self.repo.get_proceeding_version(prev_version_id)
         curr_ver = self.repo.get_proceeding_version(curr_version_id)
         if not prev_ver or not curr_ver:

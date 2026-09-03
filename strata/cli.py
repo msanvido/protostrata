@@ -108,8 +108,52 @@ def main():
         print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
         print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
 
+    # 7. Dynamic Project & Regulation Lifecycle with Baseline Analysis
+    print("\n[7] Dynamic Lifecycle: Adding New Project & Ingesting New Regulation Baseline...")
+    # Add new project
+    from strata.models.entities import Project, ProceedingStatus
+    new_proj = Project(
+        id="PROJ-BESS-PEAKER-03",
+        name="PJM Fast-Response Battery Energy Storage System",
+        description="50MW / 200MWh lithium-ion battery system providing primary frequency response in PJM.",
+        owner_id="u_storage_eng",
+        status="PLANNED"
+    )
+    svc.create_project(new_proj, creator_id="u_admin")
+    print(f"    - Created Project: '{new_proj.name}' ({new_proj.id}) assigned to '{new_proj.owner_id}'")
+
+    # Ingest brand new regulation
+    nerc_text = """Section 1: Mandatory Physical Security Protections
+All transmission owners operating critical 500kV bulk electric substations must implement 24/7 automated perimeter intrusion detection systems and physical barriers within 90 calendar days.
+
+Section 2: Maintenance and Audit Retention
+Owners must retain all perimeter inspection records on-site for five years.
+"""
+    proc, ver = svc.create_proceeding(
+        proceeding_id="NERC-CIP-014",
+        docket_id="RD24-02",
+        title="Physical Security Reliability Standards for Bulk Power Systems",
+        jurisdiction="NERC",
+        version_label="Initial Standard Filing",
+        raw_text=nerc_text,
+        status=ProceedingStatus.FINAL,
+        user_id="u_admin"
+    )
+    print(f"    - Ingested New Regulation: '{proc.title}' ({proc.id}) with {len(ver.sections)} sections")
+
+    # Baseline analysis: all sections analyzed as new additions
+    print("    - Running Baseline Analysis (all sections treated as new additions)...")
+    baseline_res = svc.analyze_new_regulation(proc.id, ver.id)
+    print(f"      * Total Detected Requirements: {baseline_res['total_changes']}")
+    print(f"      * Material Substantive Changes: {baseline_res['material_changes']}")
+    print(f"      * Verifiable Citations Grounded: {len([c for c in baseline_res['change_records'] if c.get('after_citation')])}")
+    
+    # Audit log verification
+    proj_dossier = svc.event_store.generate_audit_dossier("project:PROJ-BESS-PEAKER-03")
+    print(f"    - Reconstructed Audit Events for '{new_proj.id}': {proj_dossier['total_events']} events")
+
     print("\n" + "=" * 80)
-    print("STRATA MVP & SECTION 8 VERIFICATION COMPLETED SUCCESSFULLY.")
+    print("STRATA MVP & FULL LIFECYCLE DEMONSTRATION COMPLETED SUCCESSFULLY.")
     print("=" * 80)
 
 if __name__ == "__main__":

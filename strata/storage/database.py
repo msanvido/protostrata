@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     owner_id TEXT NOT NULL REFERENCES users(id),
-    status TEXT CHECK(status IN ('ACTIVE', 'COMPLETED', 'ON_HOLD')) DEFAULT 'ACTIVE',
+    status TEXT CHECK(status IN ('ACTIVE', 'COMPLETED', 'ON_HOLD', 'PLANNED', 'SUSPENDED')) DEFAULT 'ACTIVE',
     milestones_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -18,7 +18,8 @@ export interface Project {
   description: string;
   owner_id: string;
   status: string;
-  created_at: string;
+  linked_obligations?: string[];
+  created_at?: string;
 }
 
 export interface Obligation {

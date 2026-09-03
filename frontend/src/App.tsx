@@ -16,6 +16,8 @@ import { ActionInbox } from './components/ActionInbox';
 import { ExpertReviewQueue } from './components/ExpertReviewQueue';
 import { AuditTimelineStream } from './components/AuditTimelineStream';
 import { HumanOverrideModal } from './components/HumanOverrideModal';
+import { NewProjectModal } from './components/NewProjectModal';
+import { NewRegulationModal } from './components/NewRegulationModal';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'changes' | 'actions' | 'expert' | 'audit'>('overview');
@@ -32,6 +34,8 @@ export const App: React.FC = () => {
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
   const [overrideAction, setOverrideAction] = useState<ActionRecommendation | null>(null);
+  const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState<boolean>(false);
+  const [isNewRegulationModalOpen, setIsNewRegulationModalOpen] = useState<boolean>(false);
 
   // Initial Data Load
   useEffect(() => {
@@ -126,6 +130,31 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleCreateProject = async (project: Partial<Project>) => {
+    await api.createProject(project);
+    const refreshed = await api.getProjects();
+    setProjects(refreshed);
+    fetchAuditDossier(`project:${project.id}`);
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    await api.deleteProject(projectId);
+    const refreshed = await api.getProjects();
+    setProjects(refreshed);
+  };
+
+  const handleCreateProceeding = async (data: any) => {
+    const res = await api.createProceeding(data);
+    setCurrentProceeding(data.id);
+    if (res.analysis) {
+      setChangeRecords(res.analysis.change_records || []);
+      setActions(res.analysis.actions || []);
+      setEscalatedItems(res.analysis.escalated_items || []);
+      setActiveTab('changes');
+    }
+    fetchAuditDossier(`proceeding:${data.id}`);
+  };
+
   return (
     <div className="app-shell">
       <Header
@@ -133,6 +162,7 @@ export const App: React.FC = () => {
         onProceedingChange={setCurrentProceeding}
         onRunAnalysis={handleRunAnalysis}
         isAnalyzing={isAnalyzing}
+        onOpenNewRegulation={() => setIsNewRegulationModalOpen(true)}
       />
 
       {/* Navigation Tabs */}
@@ -188,6 +218,8 @@ export const App: React.FC = () => {
             obligations={obligations}
             materialChangesCount={changeRecords.filter(c => c.materiality === 'MATERIAL').length}
             escalatedCount={escalatedItems.length}
+            onOpenNewProject={() => setIsNewProjectModalOpen(true)}
+            onDeleteProject={handleDeleteProject}
           />
         )}
 
@@ -225,6 +257,22 @@ export const App: React.FC = () => {
         onClose={() => setOverrideAction(null)}
         onSubmit={handleRecordOverride}
       />
+
+      {/* New Project Creation Modal */}
+      {isNewProjectModalOpen && (
+        <NewProjectModal
+          onClose={() => setIsNewProjectModalOpen(false)}
+          onSubmit={handleCreateProject}
+        />
+      )}
+
+      {/* New Regulation Ingestion Modal */}
+      {isNewRegulationModalOpen && (
+        <NewRegulationModal
+          onClose={() => setIsNewRegulationModalOpen(false)}
+          onSubmit={handleCreateProceeding}
+        />
+      )}
     </div>
   );
 };
