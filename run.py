@@ -35,4 +35,8 @@ def main():
     uvicorn.run("strata.api.app:app", host=host, port=port, reload=False)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n[*] Strata workspace stopped cleanly.")
+        sys.exit(0)
