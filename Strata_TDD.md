@@ -353,6 +353,66 @@ CREATE TABLE embeddings (
   - `HUMAN_OVERRIDE_RECORDED`
 - Read models (Reviewer Inbox, Expert Review Queue, Entity Living Timelines) are projections folded from this append-only stream.
 
+### 4.4 State Machines & Lifecycle Transitions
+
+Strata governs compliance operations through three interconnected state machines:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    
+    subgraph Regulation_Lifecycle["1. Regulation Proceeding"]
+        DRAFT --> PROPOSED: Notice of Proposed Rulemaking (NOPR)
+        PROPOSED --> FINAL: Commission / Agency Final Order
+        PROPOSED --> WITHDRAWN: Struck Down / Abandoned
+    end
+
+    subgraph Action_Lifecycle["2. Routed Operational Action"]
+        PENDING --> ACCEPTED: Owner Accepts Directive
+        PENDING --> MODIFIED: Reviewer Records Human Override
+        ACCEPTED --> DONE: Work Completed & Audited
+        MODIFIED --> DONE: Work Completed & Audited
+        PENDING --> REJECTED: Inapplicable upon Expert Review
+    end
+
+    subgraph Project_Lifecycle["3. Enterprise Capital Project"]
+        PLANNED --> ACTIVE: EPC & Interconnection Commenced
+        ACTIVE --> SUSPENDED: Regulatory Injunction / Bottleneck
+        SUSPENDED --> ACTIVE: Compliance Deficiency Resolved
+        ACTIVE --> COMPLETED: Facility Commissioned & COD
+    end
+
+    Regulation_Lifecycle --> Action_Lifecycle: Status=FINAL elevates Urgency to ACT_NOW
+    Action_Lifecycle --> Project_Lifecycle: Completed actions advance project milestones
+```
+
+#### 4.4.1 Regulation Proceeding States (`ProceedingStatus`)
+| State | Legal Character | Enterprise Action Posture | Action Urgency |
+|---|---|---|:---:|
+| **`DRAFT`** | Early agency staff concept / discussion paper | Non-binding; informational monitoring | `MONITOR` |
+| **`PROPOSED`** | Published NOPR; public comments open | Active comment drafting, scenario modeling | `MONITOR` |
+| **`FINAL`** | Adopted Final Order; legally binding | Mandatory milestone updates & engineering changes | **`ACT_NOW`** |
+| **`WITHDRAWN`** | Docket cancelled, vacated, or superseded | Archive open monitoring tasks | `INFORMATIONAL` |
+
+- **Transition Trigger**: Detected during ingestion when successive versions have differing status (e.g. `prev_ver.status != curr_ver.status`). Emits `STATUS_TRANSITION_DETECTED` and gates downstream urgency.
+
+#### 4.4.2 Enterprise Capital Project States (`ProjectStatus`)
+| State | Operational Definition | Regulatory Implication |
+|---|---|---|
+| **`PLANNED`** | Siting, environmental scoping, and interconnection queue filing. | Monitored against queue reforms and baseline environmental reviews. |
+| **`ACTIVE`** | Active engineering design, procurement, and physical construction. | Directly subject to final emission limits, CEMS rules, and ride-through mandates. |
+| **`SUSPENDED`** | Work halted due to permitting deficiency or interconnection delay. | Actions focus on clearing specific regulatory deficiencies. |
+| **`COMPLETED`** | Commercial operation date (COD) achieved; energized. | Transitions to steady-state periodic compliance reporting. |
+
+#### 4.4.3 Action Recommendation States (`ActionState`)
+| State | Definition | Transition Mechanism |
+|---|---|---|
+| **`PENDING`** | System-recommended directive assigned to owner. | Created automatically when impact is mapped with High/Medium confidence. |
+| **`ACCEPTED`** | Owner confirms and adopts the directive into project tasks. | Triggered via `POST /actions/{id}/transition?new_state=ACCEPTED`. |
+| **`MODIFIED`** | Human reviewer adjusts text or scope with mandatory rationale. | Triggered via `POST /actions/{id}/override` (non-destructive override). |
+| **`REJECTED`** | Item marked inapplicable or duplicative. | Triggered via review resolution; recorded in event store. |
+| **`DONE`** | Physical or administrative compliance work completed. | Triggered via `POST /actions/{id}/transition?new_state=DONE`. |
+
 ---
 
 ## 5. Core Interfaces & Execution Flow

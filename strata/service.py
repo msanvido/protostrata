@@ -370,3 +370,51 @@ class StrataService:
                 }
             ))
         return action
+
+    def transition_action_state(self, action_id: str, user_id: str, new_state: ActionState, notes: str = "") -> ActionRecommendation:
+        """Transitions an action to ACCEPTED, DONE, etc. and appends an immutable audit event."""
+        action = self.repo.get_action(action_id)
+        if not action:
+            raise ValueError(f"Action not found: {action_id}")
+
+        old_state = action.state
+        action.state = new_state
+        self.repo.update_action_state(action_id, new_state.value if hasattr(new_state, "value") else str(new_state))
+
+        state_val = new_state.value if hasattr(new_state, "value") else str(new_state)
+        old_val = old_state.value if hasattr(old_state, "value") else str(old_state)
+
+        # Append state transition to action stream
+        self.event_store.append_event(AuditEvent(
+            stream_id=f"action:{action_id}",
+            event_type=AuditEventType.ACTION_STATE_CHANGED,
+            actor_type=ActorType.USER,
+            actor_id=user_id,
+            payload={
+                "action_id": action_id,
+                "from_state": old_val,
+                "to_state": state_val,
+                "notes": notes,
+                "summary": f"Action state transitioned from {old_val} to {state_val} by {user_id}. Notes: {notes}"
+            }
+        ))
+
+        # Also append to affected entity stream
+        mappings = self.repo.list_impact_mappings()
+        target_map = next((m for m in mappings if m.id == action.mapping_id), None)
+        if target_map:
+            prefix = target_map.affected_type.lower()
+            self.event_store.append_event(AuditEvent(
+                stream_id=f"{prefix}:{target_map.affected_id}",
+                event_type=AuditEventType.ACTION_STATE_CHANGED,
+                actor_type=ActorType.USER,
+                actor_id=user_id,
+                payload={
+                    "action_id": action_id,
+                    "from_state": old_val,
+                    "to_state": state_val,
+                    "notes": notes,
+                    "summary": f"Action state transitioned to {state_val} for {target_map.affected_id}."
+                }
+            ))
+        return action

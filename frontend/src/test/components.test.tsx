@@ -138,7 +138,8 @@ describe('UI Component Unit & Integration Tests', () => {
 
   it('renders ActionInbox and filters actions by urgency and modified state', () => {
     const handleOverride = vi.fn();
-    render(<ActionInbox actions={mockActions} onOpenOverride={handleOverride} />);
+    const handleTransition = vi.fn();
+    render(<ActionInbox actions={mockActions} onOpenOverride={handleOverride} onTransitionState={handleTransition} />);
 
     expect(screen.getByText('Initiate cluster study workflow review for PROJ-GT-DC-01.')).toBeInTheDocument();
     expect(screen.getByText('Monitor upcoming draft guidance for air permitting.')).toBeInTheDocument();
@@ -148,6 +149,11 @@ describe('UI Component Unit & Integration Tests', () => {
     fireEvent.click(actNowBtn);
     expect(screen.getByText('Initiate cluster study workflow review for PROJ-GT-DC-01.')).toBeInTheDocument();
     expect(screen.queryByText('Monitor upcoming draft guidance for air permitting.')).not.toBeInTheDocument();
+
+    // Click Accept
+    const acceptBtn = screen.getByRole('button', { name: 'Accept' });
+    fireEvent.click(acceptBtn);
+    expect(handleTransition).toHaveBeenCalledWith('act_01', 'ACCEPTED');
 
     // Click Modify Directive
     const modifyBtns = screen.getAllByText('Modify Directive');

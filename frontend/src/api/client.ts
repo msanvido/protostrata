@@ -56,6 +56,19 @@ export const api = {
     return res.json();
   },
 
+  async transitionAction(actionId: string, userId: string, newState: string, notes: string = ''): Promise<ActionRecommendation> {
+    const params = new URLSearchParams({
+      user_id: userId,
+      new_state: newState,
+      notes: notes
+    });
+    const res = await fetch(`/actions/${actionId}/transition?${params.toString()}`, {
+      method: 'POST'
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   async resolveExpertReview(targetId: string, reviewerId: string, decision: string, rationale: string): Promise<any> {
     const params = new URLSearchParams({
       reviewer_id: reviewerId,

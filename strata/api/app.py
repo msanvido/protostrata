@@ -92,6 +92,16 @@ def record_override(action_id: str, user_id: str, updated_text: str, rationale: 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.post("/actions/{action_id}/transition")
+def transition_action(action_id: str, user_id: str, new_state: str, notes: str = ""):
+    try:
+        from strata.models.analysis import ActionState
+        state_enum = ActionState(new_state)
+        updated = service.transition_action_state(action_id, user_id, state_enum, notes)
+        return updated.dict()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/expert_review/{target_id}/resolve")
 def resolve_expert(target_id: str, reviewer_id: str, decision: str, rationale: str):
     try:

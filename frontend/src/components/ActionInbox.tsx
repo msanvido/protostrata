@@ -4,16 +4,28 @@ import type { ActionRecommendation } from '../types';
 interface ActionInboxProps {
   actions: ActionRecommendation[];
   onOpenOverride: (action: ActionRecommendation) => void;
+  onTransitionState?: (actionId: string, newState: string) => void;
 }
 
-export const ActionInbox: React.FC<ActionInboxProps> = ({ actions, onOpenOverride }) => {
-  const [filter, setFilter] = useState<'ALL' | 'ACT_NOW' | 'MONITOR' | 'MODIFIED'>('ALL');
+export const ActionInbox: React.FC<ActionInboxProps> = ({ actions, onOpenOverride, onTransitionState }) => {
+  const [filter, setFilter] = useState<'ALL' | 'ACT_NOW' | 'MONITOR' | 'ACCEPTED' | 'MODIFIED' | 'DONE'>('ALL');
 
   const filtered = actions.filter((act) => {
     if (filter === 'ALL') return true;
     if (filter === 'MODIFIED') return act.state === 'MODIFIED';
+    if (filter === 'ACCEPTED') return act.state === 'ACCEPTED';
+    if (filter === 'DONE') return act.state === 'DONE';
     return act.urgency === filter;
   });
+
+  const getStateColor = (state: string) => {
+    switch (state) {
+      case 'ACCEPTED': return '#10b981';
+      case 'MODIFIED': return '#f59e0b';
+      case 'DONE': return '#818cf8';
+      default: return '#38bdf8';
+    }
+  };
 
   return (
     <div>
@@ -44,10 +56,22 @@ export const ActionInbox: React.FC<ActionInboxProps> = ({ actions, onOpenOverrid
           Monitor (Draft)
         </button>
         <button
+          className={`filter-btn ${filter === 'ACCEPTED' ? 'active' : ''}`}
+          onClick={() => setFilter('ACCEPTED')}
+        >
+          Accepted
+        </button>
+        <button
           className={`filter-btn ${filter === 'MODIFIED' ? 'active' : ''}`}
           onClick={() => setFilter('MODIFIED')}
         >
           Human Overrides
+        </button>
+        <button
+          className={`filter-btn ${filter === 'DONE' ? 'active' : ''}`}
+          onClick={() => setFilter('DONE')}
+        >
+          Completed
         </button>
       </div>
 
@@ -79,14 +103,32 @@ export const ActionInbox: React.FC<ActionInboxProps> = ({ actions, onOpenOverrid
                   </span>
                   <span>·</span>
                   <span>
-                    Status:{' '}
-                    <strong style={{ color: act.state === 'MODIFIED' ? '#f59e0b' : '#34d399' }}>
+                    Lifecycle State:{' '}
+                    <strong style={{ color: getStateColor(act.state) }}>
                       {act.state}
                     </strong>
                   </span>
                 </div>
               </div>
-              <div className="action-buttons">
+              <div className="action-buttons" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                {act.state !== 'ACCEPTED' && act.state !== 'DONE' && (
+                  <button
+                    className="btn btn-sm"
+                    style={{ background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.4)' }}
+                    onClick={() => onTransitionState && onTransitionState(act.id, 'ACCEPTED')}
+                  >
+                    Accept
+                  </button>
+                )}
+                {act.state !== 'DONE' && (
+                  <button
+                    className="btn btn-sm"
+                    style={{ background: 'rgba(129, 140, 248, 0.2)', color: '#a5b4fc', border: '1px solid rgba(129, 140, 248, 0.4)' }}
+                    onClick={() => onTransitionState && onTransitionState(act.id, 'DONE')}
+                  >
+                    Mark Done
+                  </button>
+                )}
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => onOpenOverride(act)}

@@ -95,6 +95,19 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleTransitionAction = async (actionId: string, newState: string) => {
+    try {
+      await api.transitionAction(actionId, 'u_ops_lead', newState);
+      const refreshed = await api.getActions();
+      setActions(refreshed);
+      if (dossier) {
+        fetchAuditDossier(dossier.stream_id);
+      }
+    } catch (err) {
+      console.error('Failed to transition action:', err);
+    }
+  };
+
   const handleResolveExpert = async (targetId: string, decision: string, rationale: string) => {
     await api.resolveExpertReview(targetId, 'u_counsel', decision, rationale);
     // Refresh analysis
@@ -186,6 +199,7 @@ export const App: React.FC = () => {
           <ActionInbox
             actions={actions}
             onOpenOverride={(action) => setOverrideAction(action)}
+            onTransitionState={handleTransitionAction}
           />
         )}
 
