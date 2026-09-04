@@ -1,14 +1,12 @@
 import pytest
 from strata.storage.database import Database
 from strata.storage.repositories import StrataRepository
-from strata.storage.event_store import EventStore
 from strata.models.entities import User, UserRole, Obligation, Project
-from strata.models.events import AuditEvent, AuditEventType, ActorType
+from strata.models.analysis import ActionRecommendation, ActionUrgency, ActionState
 
-def test_database_and_event_store():
+def test_database_and_relational_persistence():
     db = Database(":memory:")
     repo = StrataRepository(db)
-    event_store = EventStore(db)
 
     # Create User
     user = User(id="u1", name="Alice", email="alice@enterprise.com", role=UserRole.PROJECT_LEAD)
@@ -20,21 +18,53 @@ def test_database_and_event_store():
     repo.create_obligation(obl)
     assert repo.get_obligation("OBL-1").description == "Maintain battery backup"
 
-    # Append immutable event
-    event = AuditEvent(
-        stream_id="obligation:OBL-1",
-        event_type=AuditEventType.IMPACT_MAPPED,
-        actor_type=ActorType.SYSTEM,
-        actor_id="test_runner",
-        payload={"summary": "Initial battery backup compliance mapped"}
+    # Create Project
+    proj = Project(id="PROJ-1", name="Alpha Facility", description="Solar site", owner_id="u1", linked_obligations=["OBL-1"])
+    repo.create_project(proj)
+    fetched_proj = repo.get_project("PROJ-1")
+    assert fetched_proj is not None
+    assert fetched_proj.name == "Alpha Facility"
+    assert "OBL-1" in fetched_proj.linked_obligations
+
+    # Create Proceeding & Version & ChangeRecord & ImpactMapping for FK constraints
+    from strata.models.entities import Proceeding, ProceedingVersion, ProceedingStatus
+    from strata.models.analysis import ChangeRecord, ChangeType, Materiality, ConfidenceTier, ImpactMapping, Citation
+    
+    proc = Proceeding(id="P1", docket_id="D1", title="Test Rule", jurisdiction="FERC")
+    repo.create_proceeding(proc)
+    ver = ProceedingVersion(id="V1", proceeding_id="P1", version_label="Final", status=ProceedingStatus.FINAL, filed_date="2026-09-01", raw_text="text", sections=[])
+    repo.create_proceeding_version(ver)
+
+    cr = ChangeRecord(id="CR1", proceeding_id="P1", from_version_id=None, to_version_id="V1", change_type=ChangeType.NEW_REQUIREMENT, materiality=Materiality.MATERIAL, description="New requirement", confidence=ConfidenceTier.HIGH)
+    repo.create_change_record(cr)
+
+    cite = Citation(document_id="P1", version_id="V1", section_id="sec_1", para_id="p1", quoted_text="text")
+    mapping = ImpactMapping(id="map_1", change_id="CR1", affected_type="OBLIGATION", affected_id="OBL-1", rationale="Impacted", change_citation=cite, affected_citation=cite, confidence=ConfidenceTier.HIGH)
+    repo.create_impact_mapping(mapping)
+
+    # Create and update action override
+    act = ActionRecommendation(
+        id="act_1",
+        mapping_id="map_1",
+        recommended_action="Inspect battery telemetry",
+        suggested_owner_id="u1",
+        urgency=ActionUrgency.ACT_NOW
     )
-    event_store.append_event(event)
+    repo.create_action(act)
+    assert repo.get_action("act_1").state == ActionState.PENDING
 
-    events = event_store.get_events_for_stream("obligation:OBL-1")
-    assert len(events) == 1
-    assert events[0].event_type == AuditEventType.IMPACT_MAPPED
+    # Override preserves original directive text and records rationale (state returns to PENDING review)
+    repo.update_action_override("act_1", "Inspect battery telemetry daily", ActionState.PENDING.value,
+                                updated_by="u1", rationale="Frequency raised after audit")
+    updated = repo.get_action("act_1")
+    assert updated.state == ActionState.PENDING
+    assert updated.recommended_action == "Inspect battery telemetry daily"
+    assert updated.original_action == "Inspect battery telemetry"
+    assert updated.override_rationale == "Frequency raised after audit"
+    assert updated.updated_by == "u1"
 
-    # Reconstruct dossier
-    dossier = event_store.generate_audit_dossier("obligation:OBL-1")
-    assert dossier["total_events"] == 1
-    assert dossier["reconstructed_timeline"][0]["summary"] == "Initial battery backup compliance mapped"
+    # State transitions persist actor attribution
+    repo.update_action_state("act_1", ActionState.APPROVED.value, updated_by="u1", note="Reviewed")
+    approved = repo.get_action("act_1")
+    assert approved.state == ActionState.APPROVED
+    assert approved.state_note == "Reviewed"

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { EscalatedItem } from '../types';
 
 interface ExpertReviewQueueProps {
@@ -10,18 +10,19 @@ export const ExpertReviewQueue: React.FC<ExpertReviewQueueProps> = ({
   escalatedItems,
   onResolve,
 }) => {
-  const handleResolvePrompt = async (targetId: string, decision: string) => {
-    const defaultReason = decision === 'CONFIRMED_APPLICABLE' 
-      ? 'Verified against enterprise operational scope and environmental classification.'
-      : 'Determined facility qualifies for specific statutory exclusion.';
-    const rationale = prompt(`Enter legal counsel rationale for ${decision}:`, defaultReason);
-    if (!rationale) return;
+  // Inline rationale capture per item (replaces blocking prompt()/alert() dialogs)
+  const [rationales, setRationales] = useState<Record<string, string>>({});
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
 
+  const handleResolve = async (targetId: string, decision: string) => {
+    const rationale = (rationales[targetId] || '').trim();
+    if (!rationale) return;
+    setResolvingId(targetId);
     try {
       await onResolve(targetId, decision, rationale);
-      alert(`Item ${targetId} resolved successfully. Audit event recorded.`);
-    } catch (err) {
-      alert('Failed to resolve item: ' + err);
+      setRationales(prev => ({ ...prev, [targetId]: '' }));
+    } finally {
+      setResolvingId(null);
     }
   };
 
@@ -32,7 +33,9 @@ export const ExpertReviewQueue: React.FC<ExpertReviewQueueProps> = ({
         <div>
           <h2>Expert Review Queue (Confidence Gating)</h2>
           <p>
-            Under PRD FR6, low-confidence interpretations or ambiguous statutory terms are structurally blocked from auto-creating operational tasks until resolved by qualified legal counsel.
+            Low-confidence interpretations or ambiguous statutory terms are structurally blocked from creating
+            operational directives until resolved by qualified legal counsel. Confirming an item releases it to
+            the compliance review inbox; dismissing it closes the item with a recorded rationale.
           </p>
         </div>
       </div>
@@ -45,6 +48,7 @@ export const ExpertReviewQueue: React.FC<ExpertReviewQueueProps> = ({
         <div className="expert-list">
           {escalatedItems.map((item, idx) => {
             const targetId = item.mapping ? item.mapping.id : item.change.id;
+            const rationale = rationales[targetId] || '';
             return (
               <div key={targetId || idx} className="expert-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -71,22 +75,33 @@ export const ExpertReviewQueue: React.FC<ExpertReviewQueueProps> = ({
                     borderTop: '1px solid rgba(255,255,255,0.08)',
                     paddingTop: '0.85rem',
                     display: 'flex',
-                    gap: '0.5rem',
-                    justifyContent: 'flex-end',
+                    flexDirection: 'column',
+                    gap: '0.6rem',
                   }}
                 >
-                  <button
-                    className="btn btn-primary btn-sm"
-                    onClick={() => handleResolvePrompt(targetId, 'CONFIRMED_APPLICABLE')}
-                  >
-                    Confirm Applicable
-                  </button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => handleResolvePrompt(targetId, 'DISMISS_NON_APPLICABLE')}
-                  >
-                    Dismiss as Exempt
-                  </button>
+                  <textarea
+                    className="textarea"
+                    rows={2}
+                    placeholder="Mandatory counsel rationale (required to resolve)..."
+                    value={rationale}
+                    onChange={(e) => setRationales(prev => ({ ...prev, [targetId]: e.target.value }))}
+                  />
+                  <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      disabled={!rationale || resolvingId === targetId}
+                      onClick={() => handleResolve(targetId, 'CONFIRMED_APPLICABLE')}
+                    >
+                      Confirm Applicable
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={!rationale || resolvingId === targetId}
+                      onClick={() => handleResolve(targetId, 'DISMISS_NON_APPLICABLE')}
+                    >
+                      Dismiss as Exempt
+                    </button>
+                  </div>
                 </div>
               </div>
             );

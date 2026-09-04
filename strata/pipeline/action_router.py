@@ -21,7 +21,7 @@ class ActionRouter:
             return None
 
         # Resolve owner deterministically from affected item metadata
-        owner_id = owner_lookup.get(mapping.affected_id, "admin")
+        owner_id = owner_lookup.get(mapping.affected_id, "u_compliance")
 
         # Determine urgency based on hard business rules
         urgency = cls._determine_urgency(proceeding_status, change_type)
@@ -32,6 +32,7 @@ class ActionRouter:
         return ActionRecommendation(
             id=f"act_{uuid.uuid4().hex[:8]}",
             mapping_id=mapping.id,
+            change_id=mapping.change_id,
             recommended_action=action_text,
             suggested_owner_id=owner_id,
             urgency=urgency,
@@ -57,6 +58,6 @@ class ActionRouter:
             return f"Review and adjust operating parameters for obligation {mapping.affected_id} to satisfy {mapping.rationale[:90]}."
         elif mapping.affected_type == "PROJECT":
             return f"Initiate workstream review for project {mapping.affected_id}; update project milestone timelines and engineering design."
-        elif mapping.affected_type == "DOC_PARA":
+        elif mapping.affected_type == "DOCUMENT":
             return f"Review and revise Section {mapping.affected_citation.section_id} of internal document {mapping.affected_citation.document_id} to align with new regulatory requirement."
         return f"Evaluate compliance impact for {mapping.affected_id}: {mapping.rationale}"

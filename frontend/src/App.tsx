@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { api } from './api/client';
 import type { 
   Project, 
-  Proceeding,
+  Proceeding, 
   Obligation, 
   ChangeRecord, 
   ActionRecommendation, 
+  ActionState,
   EscalatedItem, 
-  AuditDossier,
+  ExpertReviewRecord,
   InternalDocument
 } from './types';
 
@@ -30,12 +31,34 @@ export const App: React.FC = () => {
   const [proceedings, setProceedings] = useState<Proceeding[]>([]);
   const [documents, setDocuments] = useState<InternalDocument[]>([]);
   const [obligations, setObligations] = useState<Obligation[]>([]);
-  const [changeRecords, setChangeRecords] = useState<ChangeRecord[]>([]);
   const [actions, setActions] = useState<ActionRecommendation[]>([]);
-  const [escalatedItems, setEscalatedItems] = useState<EscalatedItem[]>([]);
+  const [expertReviewRecords, setExpertReviewRecords] = useState<ExpertReviewRecord[]>([]);
+  const [analyzedByProceeding, setAnalyzedByProceeding] = useState<Record<string, {
+    changeRecords: ChangeRecord[];
+    actions: ActionRecommendation[];
+    escalatedItems: EscalatedItem[];
+  }>>({});
+
+  // Merge persisted OPEN expert reviews (survive reloads) with the current analysis escalations
+  const currentEscalatedItems: EscalatedItem[] = (() => {
+    const analysisItems = analyzedByProceeding[currentProceeding]?.escalatedItems || [];
+    const seen = new Set(analysisItems.map(i => i.mapping?.id || i.change?.id));
+    const fromDb = expertReviewRecords
+      .filter(r => r.status === 'OPEN' && !seen.has(r.id))
+      .map(r => ({
+        change: { id: r.change_id || r.id, description: r.change_description } as ChangeRecord,
+        mapping: r.mapping_id ? { id: r.mapping_id } : undefined,
+        signals: r.signals,
+      }));
+    return [...analysisItems, ...fromDb];
+  })();
+
+  const currentAnalysis = {
+    changeRecords: analyzedByProceeding[currentProceeding]?.changeRecords || [],
+    actions: analyzedByProceeding[currentProceeding]?.actions || [],
+    escalatedItems: currentEscalatedItems,
+  };
   
-  const [dossier, setDossier] = useState<AuditDossier | null>(null);
-  const [isDossierLoading, setIsDossierLoading] = useState<boolean>(false);
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
   const [overrideAction, setOverrideAction] = useState<ActionRecommendation | null>(null);
@@ -49,21 +72,20 @@ export const App: React.FC = () => {
 
   const loadInitialContext = async () => {
     try {
-      const [projs, obls, acts, procs, docs] = await Promise.all([
+      const [projs, obls, acts, procs, docs, reviews] = await Promise.all([
         api.getProjects(),
         api.getObligations(),
         api.getActions(),
         api.getProceedings(),
-        api.getDocuments()
+        api.getDocuments(),
+        api.getExpertReviews()
       ]);
       setProjects(projs);
       setObligations(obls);
       setActions(acts);
       setProceedings(procs);
       setDocuments(docs);
-
-      // Load initial dossier
-      fetchAuditDossier('obligation:OBL-CEMS-02');
+      setExpertReviewRecords(reviews);
     } catch (err) {
       console.error('Failed to load initial context:', err);
     }
@@ -72,17 +94,43 @@ export const App: React.FC = () => {
   const handleRunAnalysis = async () => {
     setIsAnalyzing(true);
     try {
-      const prevVer = currentProceeding === 'FERC-RM22-14' ? 'FERC-RM22-14_nopr' : 'EPA-NSPS-KKKK_draft_revision';
-      const currVer = currentProceeding === 'FERC-RM22-14' ? 'FERC-RM22-14_final_rule' : 'EPA-NSPS-KKKK_final_rule';
+      const proc = proceedings.find(p => p.id === currentProceeding);
+      let prevVer = '';
+      let currVer = '';
+      if (proc && proc.versions && proc.versions.length >= 2) {
+        prevVer = proc.versions[0].id;
+        currVer = proc.versions[proc.versions.length - 1].id;
+      } else if (proc && proc.versions && proc.versions.length === 1) {
+        currVer = proc.versions[0].id;
+      } else {
+        prevVer = currentProceeding === 'FERC-RM22-14' ? 'FERC-RM22-14_nopr' : 'EPA-NSPS-KKKK_draft_revision';
+        currVer = currentProceeding === 'FERC-RM22-14' ? 'FERC-RM22-14_final_rule' : 'EPA-NSPS-KKKK_final_rule';
+      }
 
       const result = await api.runAnalysis(currentProceeding, prevVer, currVer);
 
-      setChangeRecords(result.change_records || []);
-      setActions(result.actions || []);
-      setEscalatedItems(result.escalated_items || []);
+      const newAnalysis = {
+        changeRecords: result.change_records || [],
+        actions: result.actions || [],
+        escalatedItems: result.escalated_items || [],
+      };
 
-      // Refresh default dossier
-      fetchAuditDossier(currentProceeding === 'FERC-RM22-14' ? 'obligation:OBL-RIDETHRU-03' : 'obligation:OBL-CEMS-02');
+      setAnalyzedByProceeding(prev => ({
+        ...prev,
+        [currentProceeding]: newAnalysis
+      }));
+
+      // Refresh global actions, obligations, projects, and the persisted expert queue
+      const [allActs, allObls, allProjs, reviews] = await Promise.all([
+        api.getActions(),
+        api.getObligations(),
+        api.getProjects(),
+        api.getExpertReviews()
+      ]);
+      setActions(allActs);
+      setObligations(allObls);
+      setProjects(allProjs);
+      setExpertReviewRecords(reviews);
     } catch (err) {
       alert('Analysis execution failed: ' + err);
     } finally {
@@ -90,38 +138,100 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleRecordOverride = async (actionId: string, updatedText: string, rationale: string) => {
-    await api.recordOverride(actionId, 'u_compliance', updatedText, rationale);
-    const refreshed = await api.getActions();
-    setActions(refreshed);
-    if (dossier) {
-      fetchAuditDossier(dossier.stream_id);
+  const COMPLIANCE_REVIEWER = 'u_compliance';
+
+  const handleRecordOverride = async (action: ActionRecommendation, updatedText: string, rationale: string) => {
+    // Persona attribution: modifications of PENDING items are compliance edits; APPROVED/IN_PROGRESS
+    // edits come from the assigned project lead. Either way the directive returns to PENDING review.
+    const actorId = action.state === 'PENDING' ? COMPLIANCE_REVIEWER : action.suggested_owner_id;
+    try {
+      const updated = await api.recordOverride(action.id, actorId, updatedText, rationale);
+      const updatedState: ActionState = 'PENDING';
+      setActions(prev => prev.map(a => a.id === action.id ? { ...a, ...updated, state: updatedState } : a));
+      setAnalyzedByProceeding(prev => {
+        const next = { ...prev };
+        for (const p in next) {
+          if (next[p]) {
+            next[p] = {
+              ...next[p],
+              actions: next[p].actions.map(a => a.id === action.id ? { ...a, ...updated, state: updatedState } : a)
+            };
+          }
+        }
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to record override:', err);
+      alert('Failed to record override: ' + err);
+      throw err;
     }
   };
 
-  const handleTransitionAction = async (actionId: string, newState: string) => {
+  const handleTransitionAction = async (actionId: string, newState: string, actorId?: string) => {
     try {
-      const updated = await api.transitionAction(actionId, newState, 'u_user');
-      setActions(prev => prev.map(a => a.id === actionId ? updated : a));
+      const targetState = newState as ActionState;
+      // Persona attribution: Stage 1 (PENDING -> APPROVED/REJECTED) is compliance; Stage 2
+      // (APPROVED/IN_PROGRESS -> IN_PROGRESS/DONE) is the assigned project lead.
+      const existing = actions.find(a => a.id === actionId);
+      const actor = actorId || (targetState === 'APPROVED' || targetState === 'REJECTED'
+        ? COMPLIANCE_REVIEWER
+        : existing?.suggested_owner_id || COMPLIANCE_REVIEWER);
+      const updated = await api.transitionAction(actionId, newState, actor);
+      setActions(prev => prev.map(a => a.id === actionId ? { ...a, ...updated, state: targetState } : a));
+      setAnalyzedByProceeding(prev => {
+        const next = { ...prev };
+        for (const p in next) {
+          if (next[p]) {
+            next[p] = {
+              ...next[p],
+              actions: next[p].actions.map(a => a.id === actionId ? { ...a, ...updated, state: targetState } : a)
+            };
+          }
+        }
+        return next;
+      });
+
+      // When compliance approves, refresh obligations & projects so the adopted obligation appears immediately
+      if (targetState === 'APPROVED') {
+        const [refreshedObls, refreshedProjs] = await Promise.all([
+          api.getObligations(),
+          api.getProjects()
+        ]);
+        setObligations(refreshedObls);
+        setProjects(refreshedProjs);
+      }
     } catch (err) {
       console.error('Failed to transition action:', err);
+      alert('Failed to update action state: ' + err);
     }
   };
 
   const handleResolveExpert = async (targetId: string, decision: string, rationale: string) => {
-    await api.resolveExpertReview(targetId, 'u_counsel', decision, rationale);
-    handleRunAnalysis();
-  };
-
-  const fetchAuditDossier = async (streamId: string) => {
-    setIsDossierLoading(true);
     try {
-      const res = await api.getAuditDossier(streamId);
-      setDossier(res);
+      await api.resolveExpertReview(targetId, 'u_counsel', decision, rationale);
+      // Refresh queue + any action released by the confirmation (no full re-analysis needed)
+      const [reviews, allActs, allObls, allProjs] = await Promise.all([
+        api.getExpertReviews(),
+        api.getActions(),
+        api.getObligations(),
+        api.getProjects()
+      ]);
+      setExpertReviewRecords(reviews);
+      setActions(allActs);
+      setObligations(allObls);
+      setProjects(allProjs);
+      setAnalyzedByProceeding(prev => {
+        const next = { ...prev };
+        for (const p in next) {
+          if (next[p]) {
+            next[p] = { ...next[p], escalatedItems: next[p].escalatedItems.filter(i => (i.mapping?.id || i.change?.id) !== targetId) };
+          }
+        }
+        return next;
+      });
     } catch (err) {
-      console.error('Failed to fetch audit dossier:', err);
-    } finally {
-      setIsDossierLoading(false);
+      console.error('Failed to resolve expert review:', err);
+      alert('Failed to resolve expert review: ' + err);
     }
   };
 
@@ -130,7 +240,6 @@ export const App: React.FC = () => {
     const refreshed = await api.getProjects();
     setProjects(refreshed);
     if (project.id) setSelectedProjectId(project.id);
-    fetchAuditDossier(`project:${project.id}`);
   };
 
   const handleCreateProceeding = async (data: any) => {
@@ -139,11 +248,15 @@ export const App: React.FC = () => {
     setProceedings(procs);
     setCurrentProceeding(data.id);
     if (res.analysis) {
-      setChangeRecords(res.analysis.change_records || []);
-      setActions(res.analysis.actions || []);
-      setEscalatedItems(res.analysis.escalated_items || []);
+      setAnalyzedByProceeding(prev => ({
+        ...prev,
+        [data.id]: {
+          changeRecords: res.analysis.change_records || [],
+          actions: res.analysis.actions || [],
+          escalatedItems: res.analysis.escalated_items || [],
+        }
+      }));
     }
-    fetchAuditDossier(`proceeding:${data.id}`);
   };
 
   return (
@@ -162,7 +275,7 @@ export const App: React.FC = () => {
             proceedings={proceedings}
             obligations={obligations}
             actions={actions}
-            escalatedCount={escalatedItems.length}
+            escalatedCount={currentAnalysis.escalatedItems.length}
             onNavigateProjectLead={(projId) => {
               if (projId) setSelectedProjectId(projId);
               setViewMode('project_lead');
@@ -196,11 +309,9 @@ export const App: React.FC = () => {
             documents={documents}
             projects={projects}
             obligations={obligations}
-            changeRecords={changeRecords}
+            changeRecords={currentAnalysis.changeRecords}
             actions={actions}
-            escalatedItems={escalatedItems}
-            dossier={dossier}
-            isDossierLoading={isDossierLoading}
+            escalatedItems={currentAnalysis.escalatedItems}
             currentProceeding={currentProceeding}
             isAnalyzing={isAnalyzing}
             onProceedingChange={setCurrentProceeding}
@@ -209,7 +320,6 @@ export const App: React.FC = () => {
             onOpenOverride={(action) => setOverrideAction(action)}
             onTransitionActionState={handleTransitionAction}
             onResolveExpert={handleResolveExpert}
-            onFetchDossier={fetchAuditDossier}
           />
         )}
       </main>

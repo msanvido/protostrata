@@ -9,4 +9,4 @@ Feature: Transparent Confidence Gating & Expert Review Escalation
     Then the system should identify an ambiguous term with confidence "LOW"
     And the low-confidence item should be routed to the Expert Review Queue
     And when expert reviewer "u_counsel" resolves the item with decision "CONFIRMED_APPLICABLE"
-    Then an immutable audit event should record the expert resolution and rationale
+    Then the expert resolution and rationale should be recorded successfully

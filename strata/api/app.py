@@ -31,15 +31,37 @@ ui_dir = os.path.join(os.path.dirname(__file__), "..", "ui")
 if os.path.exists(ui_dir):
     app.mount("/static", StaticFiles(directory=ui_dir), name="static")
 
-# Initialize shared database service
+# Initialize shared database service & optional live LLM client
 DB_PATH = os.environ.get("STRATA_DB_PATH", "strata.db")
-service = StrataService(db_path=DB_PATH)
+llm_client = None
+if any(os.environ.get(k) for k in ["OPENROUTER_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "STRATA_LLM_PROVIDER"]):
+    try:
+        from strata.llm.client import LLMClient
+        llm_client = LLMClient()
+    except Exception:
+        llm_client = None
+
+service = StrataService(db_path=DB_PATH, llm_client=llm_client)
 
 @app.on_event("startup")
 def startup_event():
-    # Ensure database is initialized
-    if not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
-        seed_database(DB_PATH)
+    global service
+    # Reseed only when explicitly requested (STRATA_RESEED_ON_STARTUP=1) or on a fresh/empty DB,
+    # so restarting the workspace preserves user work by default.
+    reseed = os.environ.get("STRATA_RESEED_ON_STARTUP", "0") == "1"
+    if reseed or not os.path.exists(DB_PATH) or os.path.getsize(DB_PATH) == 0:
+        service = seed_database(DB_PATH)
+        if llm_client:
+            service.llm_client = llm_client
+
+@app.post("/reset")
+def reset_demo():
+    """Resets database to pristine demo baseline (0 actions, 0 change records)."""
+    global service
+    service = seed_database(DB_PATH)
+    if llm_client:
+        service.llm_client = llm_client
+    return {"status": "ok", "message": "Database reset to clean baseline."}
 
 @app.get("/", response_class=HTMLResponse)
 def get_ui():
@@ -53,7 +75,12 @@ def get_ui():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "Strata MVP"}
+    return {
+        "status": "ok",
+        "service": "Strata MVP",
+        "llm_provider": llm_client.provider if llm_client else "mock",
+        "llm_model": llm_client.model if llm_client else "deterministic-rules-engine",
+    }
 
 class CreateProjectRequest(BaseModel):
     id: str
@@ -71,7 +98,7 @@ class CreateProceedingRequest(BaseModel):
     version_label: str = "Initial Filing"
     raw_text: str
     status: str = "PROPOSED"
-    auto_analyze: bool = True
+    auto_analyze: bool = False
 
 @app.get("/proceedings")
 def list_proceedings():
@@ -167,9 +194,10 @@ def list_obligations():
     return [o.dict() for o in service.repo.list_obligations()]
 
 @app.post("/analyze")
-def run_analysis(proceeding_id: str, prev_version_id: str, curr_version_id: str):
+def run_analysis(proceeding_id: str, prev_version_id: Optional[str] = None, curr_version_id: Optional[str] = None):
     try:
-        res = service.analyze_versions(proceeding_id, prev_version_id, curr_version_id)
+        prev_id = prev_version_id if (prev_version_id and prev_version_id != "none" and prev_version_id != "null" and prev_version_id != "") else None
+        res = service.analyze_versions(proceeding_id, prev_id or "", curr_version_id or "")
         return res
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -180,7 +208,8 @@ def list_actions(owner_id: Optional[str] = None, state: Optional[str] = None):
     return [a.dict() for a in actions]
 
 @app.post("/actions/{action_id}/override")
-def record_override(action_id: str, user_id: str, updated_text: str, rationale: str):
+def record_override(action_id: str, updated_text: str, rationale: str = "", user_id: str = "u_compliance"):
+    """Human modification of a directive. Revised directive returns to PENDING compliance review."""
     try:
         updated = service.record_human_override(action_id, user_id, updated_text, rationale)
         return updated.dict()
@@ -188,23 +217,28 @@ def record_override(action_id: str, user_id: str, updated_text: str, rationale: 
         raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/actions/{action_id}/transition")
-def transition_action(action_id: str, user_id: str, new_state: str, notes: str = ""):
+def transition_action(action_id: str, new_state: str, user_id: str = "u_compliance", notes: str = ""):
+    """Persona-owned lifecycle transition, e.g. PENDING->APPROVED (compliance), APPROVED->DONE (project lead)."""
     try:
         from strata.models.analysis import ActionState
         state_enum = ActionState(new_state)
         updated = service.transition_action_state(action_id, user_id, state_enum, notes)
         return updated.dict()
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/expert_reviews")
+def list_expert_reviews(status: Optional[str] = None):
+    """Persisted Expert Review Queue items (default: all, filter with ?status=OPEN)."""
+    return service.list_expert_reviews(status=status)
 
 @app.post("/expert_review/{target_id}/resolve")
 def resolve_expert(target_id: str, reviewer_id: str, decision: str, rationale: str):
+    """Resolves an expert review item; confirming decisions release the mapping as a PENDING action."""
     try:
-        event = service.resolve_expert_review(target_id, reviewer_id, decision, rationale)
-        return event.dict()
+        result = service.resolve_expert_review(target_id, reviewer_id, decision, rationale)
+        return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-@app.get("/audit/{stream_id}")
-def get_audit_dossier(stream_id: str):
-    return service.event_store.generate_audit_dossier(stream_id)

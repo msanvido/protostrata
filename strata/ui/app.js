@@ -42,24 +42,6 @@ function initListeners() {
     runBtn.addEventListener("click", runAnalysis);
   }
 
-  // Audit controls
-  const auditBtn = document.getElementById("btn-load-audit");
-  if (auditBtn) {
-    auditBtn.addEventListener("click", () => {
-      const streamId = document.getElementById("audit-stream-input").value.trim();
-      loadAuditDossier(streamId);
-    });
-  }
-
-  const solarAuditBtn = document.getElementById("btn-load-solar-audit");
-  if (solarAuditBtn) {
-    solarAuditBtn.addEventListener("click", () => {
-      const streamId = "obligation:OBL-RIDETHRU-03";
-      document.getElementById("audit-stream-input").value = streamId;
-      loadAuditDossier(streamId);
-    });
-  }
-
   // Filter buttons in Action Inbox
   const filterBtns = document.querySelectorAll(".filter-btn");
   filterBtns.forEach(btn => {
@@ -104,9 +86,6 @@ async function loadInitialData() {
     renderProjects(projects);
     renderObligations(obligations);
     renderActions(cachedActions);
-
-    // Initial audit load
-    loadAuditDossier("obligation:OBL-CEMS-02");
   } catch (err) {
     console.error("Failed to load initial workspace data:", err);
   }
@@ -241,7 +220,7 @@ function renderActions(actions) {
           <span>·</span>
           <span>Urgency: <span class="badge ${act.urgency === 'ACT_NOW' ? 'badge-material' : 'badge-proposed'}">${act.urgency}</span></span>
           <span>·</span>
-          <span>Status: <strong style="color:${act.state === 'MODIFIED' ? '#f59e0b' : '#34d399'}">${act.state}</strong></span>
+          <span>Status: <strong style="color:${act.state === 'PENDING' ? '#f59e0b' : '#34d399'}">${act.state}</strong></span>
         </div>
       </div>
       <div class="action-buttons">
@@ -254,8 +233,8 @@ function renderActions(actions) {
 function renderFilteredActions(filter) {
   if (filter === "ALL") {
     renderActions(cachedActions);
-  } else if (filter === "MODIFIED") {
-    renderActions(cachedActions.filter(a => a.state === "MODIFIED"));
+  } else if (filter === "PENDING") {
+    renderActions(cachedActions.filter(a => a.state === "PENDING"));
   } else {
     renderActions(cachedActions.filter(a => a.urgency === filter));
   }
@@ -302,7 +281,7 @@ async function resolveExpertItem(targetId, decision) {
       method: "POST"
     });
     if (!res.ok) throw new Error(await res.text());
-    alert(`Item ${targetId} resolved successfully. Immutable audit event logged.`);
+    alert(`Item ${targetId} resolved successfully.`);
     // Re-run analysis or reload data
     runAnalysis();
   } catch (err) {
@@ -344,57 +323,14 @@ async function commitHumanOverride() {
     if (!res.ok) throw new Error(await res.text());
 
     closeModal();
-    alert("Human override successfully recorded. Original system recommendation preserved in event store.");
+    alert("Human override successfully recorded.");
     
-    // Refresh actions and audit dossier
+    // Refresh actions
     const actRes = await fetch("/actions");
     cachedActions = await actRes.json();
     renderActions(cachedActions);
-    loadAuditDossier(document.getElementById("audit-stream-input").value);
   } catch (err) {
     alert("Failed to commit override: " + err);
-  }
-}
-
-// Living Audit Dossier Flow
-async function loadAuditDossier(streamId) {
-  const container = document.getElementById("audit-dossier-container");
-  container.innerHTML = '<div class="loading-spinner">Reconstructing living audit timeline from event store...</div>';
-
-  try {
-    const res = await fetch(`/audit/${encodeURIComponent(streamId)}`);
-    const dossier = await res.json();
-
-    if (!dossier.reconstructed_timeline || !dossier.reconstructed_timeline.length) {
-      container.innerHTML = `<div class="empty-state">No audit events recorded for stream '${streamId}'.</div>`;
-      return;
-    }
-
-    container.innerHTML = `
-      <div style="padding:1.25rem;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
-          <div>
-            <h3>Living Compliance Timeline</h3>
-            <span style="font-size:0.8rem; color:#9ca3af; font-family:var(--font-mono);">Stream: ${streamId}</span>
-          </div>
-          <span class="badge badge-final">${dossier.total_events} Immutable Events Reconstructed</span>
-        </div>
-        <div class="timeline-stream">
-          ${dossier.reconstructed_timeline.map(evt => `
-            <div class="timeline-node">
-              <div class="timeline-dot"></div>
-              <div class="timeline-content">
-                <div class="timeline-time">${evt.timestamp}</div>
-                <div class="timeline-actor">${evt.actor} → <span style="color:#f3f4f6;">${evt.event_type}</span></div>
-                <div class="timeline-summary">${escapeHtml(evt.summary)}</div>
-              </div>
-            </div>
-          `).join("")}
-        </div>
-      </div>
-    `;
-  } catch (err) {
-    container.innerHTML = `<div class="empty-state" style="color:#f87171;">Failed to load audit dossier: ${err}</div>`;
   }
 }
 

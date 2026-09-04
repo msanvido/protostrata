@@ -7,7 +7,6 @@ import { ChangeDiffViewer } from '../components/ChangeDiffViewer';
 import { ActionInbox } from '../components/ActionInbox';
 import { HumanOverrideModal } from '../components/HumanOverrideModal';
 import { ExpertReviewQueue } from '../components/ExpertReviewQueue';
-import { AuditTimelineStream } from '../components/AuditTimelineStream';
 import { DashboardView } from '../components/DashboardView';
 import { ProjectLeadView } from '../components/ProjectLeadView';
 import { ComplianceAnalystView } from '../components/ComplianceAnalystView';
@@ -17,8 +16,7 @@ import type {
   Obligation, 
   ChangeRecord, 
   ActionRecommendation, 
-  EscalatedItem, 
-  AuditDossier 
+  EscalatedItem 
 } from '../types';
 
 const mockProjects: Project[] = [
@@ -103,7 +101,7 @@ const mockActions: ActionRecommendation[] = [
     recommended_action: 'Monitor upcoming draft guidance for air permitting.',
     suggested_owner_id: 'u_ops_lead',
     urgency: 'MONITOR',
-    state: 'MODIFIED'
+    state: 'APPROVED'
   }
 ];
 
@@ -140,7 +138,7 @@ describe('UI Component Unit & Integration Tests', () => {
     expect(screen.getByText(/Executive Dashboard/i)).toBeInTheDocument();
     expect(screen.getByText(/Project Lead View/i)).toBeInTheDocument();
     expect(screen.getByText(/Compliance Analyst View/i)).toBeInTheDocument();
-    expect(screen.getByText(/openrouter:gemini-2.5-flash/i)).toBeInTheDocument();
+    expect(screen.getByText(/mock \(deterministic\)/i)).toBeInTheDocument();
 
     const projLeadBtn = screen.getByText(/Project Lead View/i);
     fireEvent.click(projLeadBtn);
@@ -200,13 +198,14 @@ describe('UI Component Unit & Integration Tests', () => {
     expect(screen.getByText(/Governing Compliance Obligations/i)).toBeInTheDocument();
     expect(screen.getByText(/Project Lead Actions & Workstream Directives/i)).toBeInTheDocument();
 
+    // Only compliance-approved (APPROVED) directives appear in the lead's execution inbox
     const acceptBtns = screen.getAllByRole('button', { name: /Accept Directive/i });
     fireEvent.click(acceptBtns[0]);
-    expect(handleTransition).toHaveBeenCalledWith('act_01', 'ACCEPTED');
+    expect(handleTransition).toHaveBeenCalledWith('act_02', 'IN_PROGRESS', 'u_ops_lead');
 
     const markDoneBtns = screen.getAllByRole('button', { name: /✓ Mark Done/i });
     fireEvent.click(markDoneBtns[0]);
-    expect(handleTransition).toHaveBeenCalledWith('act_01', 'DONE');
+    expect(handleTransition).toHaveBeenCalledWith('act_02', 'DONE', 'u_ops_lead');
   });
 
   it('renders ComplianceAnalystView with docket selector, downstream impacts, and subtabs', () => {
@@ -216,7 +215,6 @@ describe('UI Component Unit & Integration Tests', () => {
     const handleOverride = vi.fn();
     const handleTransition = vi.fn();
     const handleResolve = vi.fn().mockResolvedValue(undefined);
-    const handleFetchDossier = vi.fn();
 
     render(
       <ComplianceAnalystView
@@ -227,8 +225,6 @@ describe('UI Component Unit & Integration Tests', () => {
         changeRecords={mockChangeRecords}
         actions={mockActions}
         escalatedItems={[]}
-        dossier={null}
-        isDossierLoading={false}
         currentProceeding="FERC-RM22-14"
         isAnalyzing={false}
         onProceedingChange={handleProcChange}
@@ -237,7 +233,6 @@ describe('UI Component Unit & Integration Tests', () => {
         onOpenOverride={handleOverride}
         onTransitionActionState={handleTransition}
         onResolveExpert={handleResolve}
-        onFetchDossier={handleFetchDossier}
       />
     );
 
@@ -283,29 +278,75 @@ describe('UI Component Unit & Integration Tests', () => {
     expect(screen.getByText(/"must complete all cluster studies within 150 calendar days."/i)).toBeInTheDocument();
   });
 
-  it('renders ActionInbox and filters actions by urgency and modified state', () => {
+  it('renders ActionInbox compliance review filters and stage-1 decisions', () => {
     const handleOverride = vi.fn();
     const handleTransition = vi.fn();
     render(<ActionInbox actions={mockActions} onOpenOverride={handleOverride} onTransitionState={handleTransition} />);
 
     expect(screen.getByText('Initiate cluster study workflow review for PROJ-GT-DC-01.')).toBeInTheDocument();
-    expect(screen.getByText('Monitor upcoming draft guidance for air permitting.')).toBeInTheDocument();
 
-    // Filter ACT_NOW
-    const actNowBtn = screen.getByRole('button', { name: /Act Now \(Final\)/i });
-    fireEvent.click(actNowBtn);
-    expect(screen.getByText('Initiate cluster study workflow review for PROJ-GT-DC-01.')).toBeInTheDocument();
+    // Default filter "Awaiting Compliance Review" only shows PENDING directives (act_02 is APPROVED)
     expect(screen.queryByText('Monitor upcoming draft guidance for air permitting.')).not.toBeInTheDocument();
 
-    // Click Accept
-    const acceptBtn = screen.getByRole('button', { name: 'Accept' });
+    // Switch to Approved filter
+    const approvedBtn = screen.getByRole('button', { name: /Approved → Project Lead/i });
+    fireEvent.click(approvedBtn);
+    expect(screen.getByText('Monitor upcoming draft guidance for air permitting.')).toBeInTheDocument();
+
+    // Back to review filter; Stage-1 decision buttons
+    const reviewBtn = screen.getByRole('button', { name: /Awaiting Compliance Review/i });
+    fireEvent.click(reviewBtn);
+
+    // Click Accept & Adopt (PENDING -> APPROVED)
+    const acceptBtn = screen.getByRole('button', { name: /Accept & Adopt Obligation/i });
     fireEvent.click(acceptBtn);
-    expect(handleTransition).toHaveBeenCalledWith('act_01', 'ACCEPTED');
+    expect(handleTransition).toHaveBeenCalledWith('act_01', 'APPROVED');
+
+    // Reject button targets REJECTED
+    const rejectBtn = screen.getByRole('button', { name: /✕ Reject/i });
+    fireEvent.click(rejectBtn);
+    expect(handleTransition).toHaveBeenCalledWith('act_01', 'REJECTED');
 
     // Click Modify Directive
     const modifyBtns = screen.getAllByText('Modify Directive');
     fireEvent.click(modifyBtns[0]);
     expect(handleOverride).toHaveBeenCalledWith(mockActions[0]);
+  });
+
+  it('renders ChangeDiffViewer with embedded action recommendation and review decisions', () => {
+    const handleOverride = vi.fn();
+    const handleTransition = vi.fn();
+
+    const mockActionsWithChangeId = [
+      {
+        ...mockActions[0],
+        change_id: 'cr_01'
+      }
+    ];
+
+    render(
+      <ChangeDiffViewer
+        changeRecords={mockChangeRecords}
+        actions={mockActionsWithChangeId}
+        onOpenOverride={handleOverride}
+        onTransitionActionState={handleTransition}
+      />
+    );
+
+    // Verify change delta and routed action are visible
+    expect(screen.getByText('DEADLINE_SHIFT')).toBeInTheDocument();
+    expect(screen.getByText('Routed Action Recommendation:')).toBeInTheDocument();
+    expect(screen.getByText('Initiate cluster study workflow review for PROJ-GT-DC-01.')).toBeInTheDocument();
+
+    // Verify Accept & Adopt button triggers transition to APPROVED (compliance adoption)
+    const acceptBtn = screen.getByRole('button', { name: /Accept & Adopt Obligation/i });
+    fireEvent.click(acceptBtn);
+    expect(handleTransition).toHaveBeenCalledWith('act_01', 'APPROVED');
+
+    // Verify Modify Directive button opens override
+    const modifyBtn = screen.getByRole('button', { name: /Modify Directive/i });
+    fireEvent.click(modifyBtn);
+    expect(handleOverride).toHaveBeenCalledWith(mockActionsWithChangeId[0]);
   });
 
   it('renders HumanOverrideModal and commits non-destructive overrides', async () => {
@@ -333,7 +374,7 @@ describe('UI Component Unit & Integration Tests', () => {
     fireEvent.click(commitBtn);
 
     expect(handleSubmit).toHaveBeenCalledWith(
-      'act_01',
+      mockActions[0],
       'Updated Directive Text.',
       'Legal compliance policy requires direct notification.'
     );
@@ -360,37 +401,5 @@ describe('UI Component Unit & Integration Tests', () => {
     expect(screen.getByText('Confirm Applicable')).toBeInTheDocument();
     expect(screen.getByText('Dismiss as Exempt')).toBeInTheDocument();
   });
-
-  it('renders AuditTimelineStream with chronological events and stream presets', () => {
-    const handleFetch = vi.fn();
-    const mockDossier: AuditDossier = {
-      stream_id: 'obligation:OBL-CEMS-02',
-      total_events: 1,
-      reconstructed_timeline: [
-        {
-          id: 'evt_1',
-          timestamp: '2026-09-02 12:00:00',
-          event_type: 'HUMAN_OVERRIDE_RECORDED',
-          actor: 'USER:u_reviewer',
-          summary: 'Reviewer u_reviewer modified action with rationale.',
-          payload: {}
-        }
-      ]
-    };
-
-    render(
-      <AuditTimelineStream
-        dossier={mockDossier}
-        isLoading={false}
-        onFetchDossier={handleFetch}
-      />
-    );
-
-    expect(screen.getByText(/1 Immutable Events Reconstructed/i)).toBeInTheDocument();
-    expect(screen.getByText(/Reviewer u_reviewer modified action with rationale/i)).toBeInTheDocument();
-
-    const solarBtn = screen.getByText('Preset: Solar Inverter Ride-Through');
-    fireEvent.click(solarBtn);
-    expect(handleFetch).toHaveBeenCalledWith('obligation:OBL-RIDETHRU-03');
-  });
 });
+

@@ -51,7 +51,6 @@
       <button class="nav-tab" data-tab="tab-expert">
         Expert Review Queue <span id="badge-expert-count" class="tab-pill alert">0</span>
       </button>
-      <button class="nav-tab" data-tab="tab-audit">Living Audit Dossier</button>
     </div>
     <div class="nav-meta">
       <span class="meta-item">Enterprise Context: <strong>2 Projects · 4 Obligations</strong></span>
@@ -129,7 +128,7 @@
         <button class="filter-btn active" data-filter="ALL">All Actions</button>
         <button class="filter-btn" data-filter="ACT_NOW">Act Now (Final)</button>
         <button class="filter-btn" data-filter="MONITOR">Monitor (Draft)</button>
-        <button class="filter-btn" data-filter="MODIFIED">Human Overrides</button>
+        <button class="filter-btn" data-filter="PENDING">Awaiting Compliance Review</button>
       </div>
       <div id="actions-container" class="actions-list">
         <div class="empty-state">No active recommendations. Run analysis to route actions.</div>
@@ -147,25 +146,6 @@
       </div>
       <div id="expert-items-container" class="expert-list">
         <div class="empty-state">Queue is clear. No ambiguous changes pending review.</div>
-      </div>
-    </section>
-
-    <!-- TAB 5: LIVING AUDIT DOSSIER -->
-    <section id="tab-audit" class="tab-content">
-      <div class="section-intro">
-        <h2>Living Entity State & Defensible Audit Timeline</h2>
-        <p>Append-only event stream reconstructing the complete decision history without loss of original system assertions or human modifications.</p>
-      </div>
-      <div class="audit-controls">
-        <label for="audit-stream-input">Stream Identifier:</label>
-        <input type="text" id="audit-stream-input" class="input-text" value="obligation:OBL-CEMS-02" placeholder="e.g. obligation:OBL-CEMS-02 or project:PROJ-GT-DC-01">
-        <button id="btn-load-audit" class="btn btn-secondary">Load Living Dossier</button>
-        <button id="btn-load-solar-audit" class="btn btn-ghost">Solar Ride-Through Dossier</button>
-      </div>
-      <div id="audit-dossier-container" class="audit-dossier-view card mt-3">
-        <div class="card-body">
-          <div class="empty-state">Click "Load Living Dossier" to reconstruct timeline.</div>
-        </div>
       </div>
     </section>
   </main>

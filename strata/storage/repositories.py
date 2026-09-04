@@ -117,6 +117,11 @@ class StrataRepository:
                 created_at=row["created_at"]
             )
 
+    def list_documents(self) -> List[InternalDocument]:
+        with self.db.get_connection() as conn:
+            rows = conn.execute("SELECT id FROM documents").fetchall()
+            return [d for d in (self.get_document(r["id"]) for r in rows if r["id"]) if d is not None]
+
     # --- Obligations ---
     def create_obligation(self, obl: Obligation) -> Obligation:
         with self.db.get_connection() as conn:
@@ -299,36 +304,116 @@ class StrataRepository:
             conn.commit()
         return action
 
-    def update_action_state(self, action_id: str, new_state: str) -> Optional[ActionRecommendation]:
+    def update_action_state(self, action_id: str, new_state: str, updated_by: Optional[str] = None,
+                            note: Optional[str] = None) -> Optional[ActionRecommendation]:
         with self.db.get_connection() as conn:
-            conn.execute("UPDATE actions SET state = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (new_state, action_id))
+            conn.execute(
+                "UPDATE actions SET state = ?, updated_by = ?, state_note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (new_state, updated_by, note, action_id)
+            )
             conn.commit()
         return self.get_action(action_id)
 
+    def update_action_override(self, action_id: str, new_text: str, new_state: str,
+                               updated_by: Optional[str] = None, rationale: Optional[str] = None) -> Optional[ActionRecommendation]:
+        with self.db.get_connection() as conn:
+            existing = conn.execute("SELECT recommended_action, original_action FROM actions WHERE id = ?", (action_id,)).fetchone()
+            original = existing["original_action"] if existing and existing["original_action"] else (existing["recommended_action"] if existing else None)
+            conn.execute(
+                """UPDATE actions SET recommended_action = ?, state = ?, original_action = ?, override_rationale = ?,
+                   updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+                (new_text, new_state, original, rationale, updated_by, action_id)
+            )
+            conn.commit()
+        return self.get_action(action_id)
+
+    def _action_from_row(self, row) -> ActionRecommendation:
+        return ActionRecommendation(
+            id=row["id"], mapping_id=row["mapping_id"],
+            change_id=row["change_id"] if "change_id" in row.keys() else None,
+            recommended_action=row["recommended_action"],
+            suggested_owner_id=row["suggested_owner_id"], urgency=row["urgency"], state=row["state"],
+            original_action=row["original_action"], override_rationale=row["override_rationale"],
+            updated_by=row["updated_by"], state_note=row["state_note"],
+            created_at=row["created_at"], updated_at=row["updated_at"]
+        )
+
     def get_action(self, action_id: str) -> Optional[ActionRecommendation]:
         with self.db.get_connection() as conn:
-            row = conn.execute("SELECT * FROM actions WHERE id = ?", (action_id,)).fetchone()
+            row = conn.execute("""
+                SELECT a.*, m.change_id 
+                FROM actions a
+                LEFT JOIN impact_mappings m ON a.mapping_id = m.id
+                WHERE a.id = ?
+            """, (action_id,)).fetchone()
             if not row:
                 return None
-            return ActionRecommendation(
-                id=row["id"], mapping_id=row["mapping_id"], recommended_action=row["recommended_action"],
-                suggested_owner_id=row["suggested_owner_id"], urgency=row["urgency"], state=row["state"],
-                created_at=row["created_at"], updated_at=row["updated_at"]
-            )
+            return self._action_from_row(row)
 
     def list_actions(self, owner_id: Optional[str] = None, state: Optional[str] = None) -> List[ActionRecommendation]:
         with self.db.get_connection() as conn:
-            query = "SELECT * FROM actions WHERE 1=1"
+            query = """
+                SELECT a.*, m.change_id 
+                FROM actions a
+                LEFT JOIN impact_mappings m ON a.mapping_id = m.id
+                WHERE 1=1
+            """
             params = []
             if owner_id:
-                query += " AND suggested_owner_id = ?"
+                query += " AND a.suggested_owner_id = ?"
                 params.append(owner_id)
             if state:
-                query += " AND state = ?"
+                query += " AND a.state = ?"
                 params.append(state)
             rows = conn.execute(query, params).fetchall()
-            return [ActionRecommendation(
-                id=r["id"], mapping_id=r["mapping_id"], recommended_action=r["recommended_action"],
-                suggested_owner_id=r["suggested_owner_id"], urgency=r["urgency"], state=r["state"],
-                created_at=r["created_at"], updated_at=r["updated_at"]
-            ) for r in rows]
+            return [self._action_from_row(r) for r in rows]
+
+    # --- Expert Review Queue ---
+    def create_expert_review(self, review_id: str, change_id: Optional[str], mapping_id: Optional[str],
+                             change_description: str, signals: List[str]) -> Optional[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO expert_reviews (id, change_id, mapping_id, change_description, signals_json)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (review_id, change_id, mapping_id, change_description, json.dumps(signals))
+            )
+            conn.commit()
+        return self.get_expert_review(review_id)
+
+    def get_expert_review(self, review_id: str) -> Optional[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            row = conn.execute("SELECT * FROM expert_reviews WHERE id = ?", (review_id,)).fetchone()
+            return self._expert_review_from_row(row) if row else None
+
+    def list_expert_reviews(self, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            if status:
+                rows = conn.execute("SELECT * FROM expert_reviews WHERE status = ? ORDER BY created_at ASC", (status,)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM expert_reviews ORDER BY created_at ASC").fetchall()
+            return [self._expert_review_from_row(r) for r in rows]
+
+    def resolve_expert_review(self, review_id: str, decision: str, reviewer_id: str, rationale: str) -> Optional[Dict[str, Any]]:
+        with self.db.get_connection() as conn:
+            conn.execute(
+                """UPDATE expert_reviews SET status = 'RESOLVED', decision = ?, reviewer_id = ?, rationale = ?,
+                   resolved_at = CURRENT_TIMESTAMP WHERE id = ?""",
+                (decision, reviewer_id, rationale, review_id)
+            )
+            conn.commit()
+        return self.get_expert_review(review_id)
+
+    def _expert_review_from_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": row["id"],
+            "change_id": row["change_id"],
+            "mapping_id": row["mapping_id"],
+            "change_description": row["change_description"],
+            "signals": json.loads(row["signals_json"]) if row["signals_json"] else [],
+            "status": row["status"],
+            "decision": row["decision"],
+            "reviewer_id": row["reviewer_id"],
+            "rationale": row["rationale"],
+            "created_at": row["created_at"],
+            "resolved_at": row["resolved_at"],
+        }

@@ -7,4 +7,3 @@ from strata.models.analysis import (
     ChangeType, Materiality, ConfidenceTier, ActionUrgency, ActionState,
     Citation, ChangeRecord, ImpactMapping, ActionRecommendation
 )
-from strata.models.events import ActorType, AuditEventType, AuditEvent

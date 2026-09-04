@@ -1,9 +1,8 @@
 import pytest
 from strata.service import StrataService
 from strata.models.entities import Project, ProceedingStatus
-from strata.models.events import AuditEventType
 
-def test_project_lifecycle_and_audit():
+def test_project_lifecycle():
     service = StrataService(db_path=":memory:")
     
     # 1. Create Project
@@ -24,20 +23,10 @@ def test_project_lifecycle_and_audit():
     assert retrieved.name == "PJM Fast-Response Battery Energy Storage System"
     assert retrieved.owner_id == "u_storage_eng"
 
-    # Verify audit event
-    dossier = service.event_store.generate_audit_dossier("project:PROJ-BESS-PEAKER-03")
-    assert dossier["total_events"] == 1
-    assert dossier["reconstructed_timeline"][0]["event_type"] == AuditEventType.PROJECT_CREATED.value
-
     # 2. Delete Project
     deleted = service.delete_project("PROJ-BESS-PEAKER-03", user_id="u_admin")
     assert deleted is True
     assert service.repo.get_project("PROJ-BESS-PEAKER-03") is None
-
-    # Verify deletion audit event
-    dossier = service.event_store.generate_audit_dossier("project:PROJ-BESS-PEAKER-03")
-    assert dossier["total_events"] == 2
-    assert dossier["reconstructed_timeline"][1]["event_type"] == AuditEventType.PROJECT_DELETED.value
 
 def test_regulation_lifecycle_and_baseline_analysis():
     service = StrataService(db_path=":memory:")
@@ -75,11 +64,6 @@ Facilities shall retain maintenance logs for five years.
     assert len(ver.sections) == 2
     assert service.repo.get_proceeding("NERC-CIP-014") is not None
 
-    # Verify audit event
-    proc_dossier = service.event_store.generate_audit_dossier("proceeding:NERC-CIP-014")
-    assert proc_dossier["total_events"] >= 1
-    assert any(e["event_type"] == AuditEventType.PROCEEDING_CREATED.value for e in proc_dossier["reconstructed_timeline"])
-
     # 2. Run baseline analysis (all sections analyzed as ADDED)
     res = service.analyze_new_regulation("NERC-CIP-014", ver.id)
     assert res["proceeding_id"] == "NERC-CIP-014"
@@ -95,7 +79,3 @@ Facilities shall retain maintenance logs for five years.
     del_proc = service.delete_proceeding("NERC-CIP-014", user_id="u_admin")
     assert del_proc is True
     assert service.repo.get_proceeding("NERC-CIP-014") is None
-
-    # Verify deletion audit event
-    proc_dossier = service.event_store.generate_audit_dossier("proceeding:NERC-CIP-014")
-    assert any(e["event_type"] == AuditEventType.PROCEEDING_DELETED.value for e in proc_dossier["reconstructed_timeline"])

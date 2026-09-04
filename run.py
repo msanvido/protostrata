@@ -18,8 +18,13 @@ def main():
     print("=" * 80)
     print("  STRATA REGULATORY INTELLIGENCE & LIVING OPERATIONS WORKSPACE")
     print("=" * 80)
-    print(f"[*] Initializing local database: {db_path}")
-    seed_database(db_path)
+
+    # Seed only on first run (or after an explicit reset) so restarts preserve workspace state
+    if not os.path.exists(db_path) or os.path.getsize(db_path) == 0:
+        print(f"[*] Initializing local database: {db_path}")
+        seed_database(db_path)
+    else:
+        print(f"[*] Using existing local database: {db_path} (run 'make reset-db' to reseed)")
 
     url = f"http://localhost:{port}"
     print(f"[*] Serving React SPA & REST API at: {url}")

@@ -55,7 +55,4 @@ def test_live_llm_e2e_pipeline():
     status_records = [c for c in change_records if c["change_type"] == "STATUS_TRANSITION"]
     assert len(status_records) == 1
 
-    # Verify audit event store logs the live model's results
-    audit_events = svc.event_store.get_events_for_stream("proceeding:FERC-RM22-14")
-    assert len(audit_events) > 0
     print(f"[LIVE LLM TEST] Success: Processed {result['total_changes']} changes, created {result['actions_created']} actions using live {client.model}.")

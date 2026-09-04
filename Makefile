@@ -1,4 +1,4 @@
-.PHONY: help install build run dev test test-ui test-bdd test-unit eval optimize-prompts demo clean
+.PHONY: help install build run dev test test-ui test-bdd test-unit eval optimize-prompts demo reset-db reset clean
 
 help:
 	@echo "======================================================================"
@@ -9,6 +9,7 @@ help:
 	@echo "  make build      - Compile React 19 frontend into production assets"
 	@echo "  make run        - Start the full application (React UI + FastAPI backend)"
 	@echo "  make dev        - Run Vite frontend dev server with hot-reloading"
+	@echo "  make reset-db   - Reset SQLite database to empty schema (no seed data)"
 	@echo "  make test       - Run all test suites (UI, BDD, and Unit/Integration)"
 	@echo "  make test-ui    - Run React UI component & integration tests (Vitest)"
 	@echo "  make test-bdd   - Run Cucumber / Gherkin BDD acceptance tests"
@@ -51,6 +52,12 @@ optimize-prompts:
 
 demo:
 	PYTHONPATH=. python3 strata/cli.py
+
+reset-db:
+	PYTHONPATH=. python3 -c "from strata.storage.database import Database; Database('strata.db').reset()"
+	@echo "Database strata.db successfully reset (empty schema, no seed data)."
+
+reset: reset-db
 
 clean:
 	rm -rf strata.db .pytest_cache .coverage frontend/dist __pycache__ strata/__pycache__

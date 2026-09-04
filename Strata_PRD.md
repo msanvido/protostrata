@@ -33,9 +33,8 @@ Strata is built to close this gap: a **change-to-action workspace**, not another
 | G3 | Correctly classify document status (draft vs. final) and adjust urgency/bindingness accordingly | Acting on a draft as if it were final wastes effort or creates false compliance posture; missing a final order creates real exposure |
 | G4 | Map each detected change to the specific company obligations, projects, and documents it affects | This is the "so what" — the thing generic search/alert tools cannot do because they don't have company context |
 | G5 | Recommend a concrete next action and route it to the correct reviewer/role | Turns intelligence into an assigned, trackable task |
-| G6 | Maintain a living, versioned, auditable project state, including impacts and actions, over time | Regulatory response is a long-lived process; the system must show *why* a decision was made months later, to an auditor or examiner |
-| G7 | Escalate low-confidence interpretations instead of guessing | A confidently wrong compliance interpretation is worse than an honest "needs human review" — trust is the product |
-| G8 | Detect conflicts or dependencies with other existing or pending regulations | Enables holistic cross-docket risk visibility and prevents siloed compliance errors |
+| G6 | Escalate low-confidence interpretations instead of guessing | A confidently wrong compliance interpretation is worse than an honest "needs human review" — trust is the product |
+| G7 | Detect conflicts or dependencies with other existing or pending regulations | Enables holistic cross-docket risk visibility and prevents siloed compliance errors |
 
 ### Non-Goals (out of scope for this build)
 
@@ -43,14 +42,15 @@ Strata is built to close this gap: a **change-to-action workspace**, not another
 - Real-time crawling of live government docket systems (the challenge uses synthetic/ingested proceeding versions, not live scraping infrastructure).
 - Multi-tenant SaaS concerns (billing, org management, SSO) — single-tenant demo scope.
 - Full workflow/ticketing system parity with tools like Jira/ServiceNow — routing creates actionable records, not a full PM suite.
+- Living event-sourced audit trail / timeline reconstruction engine — state tracking is maintained directly on entities, while immutable external audit logging systems are out of scope.
 
 ## 3. Users & Personas
 
 **Persona 1 — Compliance / Regulatory Affairs Analyst (`u_compliance`, `u_counsel`)**
-Monitors 10–50 active dockets across their regulatory portfolio (FERC, EPA, NERC). Tracks docket status transitions (draft vs final), reviews AI sequence diffs and verifiable citations, inspects downstream project impacts, resolves ambiguous language escalations in the Expert Review Queue, and manages the living audit dossier.
+Monitors 10–50 active dockets across their regulatory portfolio (FERC, EPA, NERC). Tracks docket status transitions (draft vs final), reviews AI sequence diffs and verifiable citations, inspects downstream project impacts, and resolves ambiguous language escalations in the Expert Review Queue. Owns **Stage 1 of the action lifecycle**: reviews every routed directive in the Compliance Review Inbox and either accepts it (adopting it as a formal obligation routed to the project lead), rejects it, or modifies it with a mandatory rationale.
 
 **Persona 2 — Project Lead / Asset Owner (`u_ops_lead`, `u_solar_lead`, `u_storage_eng`)**
-Responsible for engineering, construction, and operation of major capital assets (e.g. *Mojave Desert Solar*, *Tier 4 Datacenter Gas Turbine Substation*, *PJM Battery Energy Storage System*). Needs visibility into all applicable regulations governing their specific facilities, their current versions and bindingness, and assigned compliance action directives (`Accept Directive`, `Mark Done`, `Modify Directive`).
+Responsible for engineering, construction, and operation of major capital assets (e.g. *Mojave Desert Solar*, *Tier 4 Datacenter Gas Turbine Substation*, *PJM Battery Energy Storage System*). Needs visibility into all applicable regulations governing their specific facilities, their current versions and bindingness, and the compliance-approved directives that arrived as changes to their obligations. Owns **Stage 2 of the action lifecycle**: accepts a directive to start work (`Accept Directive`), marks it done once the obligation is materialized (`Mark Done`), or sends it back to compliance review (`Modify`).
 
 **Persona 3 — Executive / Head of Compliance (Executive Dashboard)**
 Requires a global, consolidated cross-enterprise view of all capital projects, assigned project leads, tracked regulatory proceedings, current active version statuses, and enterprise-wide action directive completion progress.
@@ -60,9 +60,10 @@ Requires a global, consolidated cross-enterprise view of all capital projects, a
 1. *As a Compliance Analyst*, when a new version of a docket I follow is ingested, I want a diff-level summary of what materially changed (not a reprint of the whole document), so I don't have to re-read everything.
 2. *As a Compliance Analyst*, I want every claim of "this changed" backed by the exact source sentence/paragraph from both versions, so I can verify it in seconds rather than re-deriving it myself.
 3. *As a Compliance Analyst*, I want to immediately know if a proceeding is a draft/NPRM or a final/adopted order, and have recommended urgency reflect that, so I don't over- or under-react.
-4. *As a Project Lead*, I want to see all applicable regulations governing my active projects, their current versions, and bindingness, and accept or complete my assigned workstream directives.
-5. *As a Compliance Analyst*, I want a recommended action (e.g., "update Section 4.2 of Data Retention Policy," "notify Project X owner of new deadline") routed to the correct project lead, so nothing falls through the cracks.
-6. *As an Executive*, I want a consolidated dashboard showing all projects, all dockets, responsible owners, and open directives to track enterprise compliance readiness.
+4. *As a Compliance Analyst*, I want each routed directive queued in my review inbox (with critical/low-confidence items highlighted separately in the Expert Review Queue), so I can accept it as a formal obligation, reject it, or amend it with a rationale before any project team is tasked.
+5. *As a Project Lead*, I want to see all applicable regulations governing my active projects, their current versions, and bindingness, and receive compliance-approved directives as changes in my obligations — which I can accept for execution or mark done once materialized.
+6. *As a Compliance Analyst*, I want a recommended action (e.g., "update Section 4.2 of Data Retention Policy," "notify Project X owner of new deadline") routed to the correct project lead only after I approve it, so nothing falls through the cracks and no task is issued without compliance sign-off.
+7. *As an Executive*, I want a consolidated dashboard showing all projects, all dockets, responsible owners, and where every directive sits in the two-stage lifecycle (awaiting compliance review → with project lead → done) to track enterprise compliance readiness.
 
 
 ## 5. Functional Requirements
@@ -93,7 +94,36 @@ Requires a global, consolidated cross-enterprise view of all capital projects, a
 - FR5.1: For each confirmed impact mapping, generate a recommended action (e.g., "revise document section," "update obligation deadline," "notify project owner," "no action — informational only").
 - FR5.2: Assign a suggested reviewer/owner based on the owner metadata of the affected obligation/project/document.
 - FR5.3: Recommended urgency must reflect proceeding status (draft = lower urgency / "monitor," final = higher urgency / "act") and any explicit deadlines found in the text.
-- FR5.4: Actions are created as trackable records with state (pending / accepted / modified / rejected / done), not just chat output.
+- FR5.4: Actions are created as trackable records with state (pending / approved / in-progress / rejected / done), not just chat output.
+- FR5.5: **Two-Stage Action Lifecycle (see FR5.5)**: Actions always flow through two persona-owned review stages — compliance review first, then project lead execution. No stage may be skipped, and each transition records the acting user.
+
+### FR5.5 — Canonical Action Lifecycle (normative)
+
+Every routed directive progresses through a single, persona-owned state machine:
+
+```
+System recommends
+   │
+   ▼
+PENDING ──Compliance: Accept & Adopt──▶ APPROVED ──Lead: Accept──▶ IN_PROGRESS ──Lead: Mark Done──▶ DONE
+   │                                     │ └──Lead: Mark Done (direct)─────────────────────────────▶ DONE
+   ├──Compliance: Reject─────────────▶ REJECTED (terminal)
+   └──Modify w/ mandatory rationale──▶ stays PENDING (revised directive re-enters compliance review)
+```
+
+| State | Meaning | Persona in control |
+|---|---|---|
+| `PENDING` | System-recommended directive awaiting compliance review | Compliance Analyst |
+| `APPROVED` | Compliance accepted; directive adopted as a formal enterprise obligation and now visible to the project lead | Project Lead (to execute) |
+| `IN_PROGRESS` | Project lead accepted the directive; work underway | Project Lead |
+| `DONE` | Obligation materialized (terminal) | — |
+| `REJECTED` | Compliance dismissed the directive as inapplicable/duplicative (terminal) | — |
+
+Rules:
+- **R1**: Only compliance may transition `PENDING → APPROVED` or `PENDING → REJECTED`; only the assigned project lead may transition `APPROVED → IN_PROGRESS`, `APPROVED → DONE`, or `IN_PROGRESS → DONE`. The system enforces this and every transition records `updated_by` + note.
+- **R2**: Approving an action automatically materializes it as a formal obligation (`OBL-ADOPTED-*`, owner = the affected asset's owner) so the project lead sees it as a change in their obligations.
+- **R3**: Any human modification of the directive text (by compliance on a `PENDING` item, or by the lead on an `APPROVED`/`IN_PROGRESS` item) requires a mandatory rationale, preserves the original directive text, and returns the item to `PENDING` compliance review.
+- **R4**: Critical/low-confidence items never enter `PENDING`; they are highlighted in the Expert Review Queue (FR6) and only reach `PENDING` after counsel confirms applicability.
 
 ### FR6 — Confidence & Escalation
 - FR6.1: Every Change Record, impact mapping, and action recommendation carries a confidence tier (High / Medium / Low) derived from: citation strength, ambiguity of language, novelty of the situation, and materiality/stakes.
@@ -101,38 +131,33 @@ Requires a global, consolidated cross-enterprise view of all capital projects, a
 - FR6.3: The system explains *why* it is uncertain (e.g., "ambiguous whether 'affected entities' includes Tier 2 vendors — no explicit definition found") rather than a generic low-confidence flag.
 - FR6.4: Human decisions on escalated items are captured and reduce/adjust confidence scoring context going forward (logged, not necessarily model-retrained, for MVP).
 
-### FR7 — Living Project State, Dynamic Lifecycle & Multi-Persona Workspace
-- FR7.1: Every obligation, project, and document maintains a timeline of every regulatory change that touched it, the mapping rationale, the action taken, who took it, and when.
-- FR7.2: All state transitions (draft→final, action pending→accepted→done, low-confidence→resolved) are append-only events; nothing is silently overwritten.
-- FR7.3: A full audit export (per obligation/project or company-wide, for a date range) must be producible showing: what changed, when the company became aware, what was concluded, what was done, and by whom.
-- FR7.4: Human overrides of any system claim/mapping/action are recorded alongside the original system output — never replacing it, always alongside it (for defensibility: "the system said X, a human corrected to Y, on this date").
-- FR7.5: Dynamic Project & Regulatory Lifecycle Management:
-  - FR7.5.1: Dynamic project creation (`POST /projects`) and deletion (`DELETE /projects/{id}`) with assigned engineering leads, operational status (`ACTIVE`, `PLANNED`, `ON_HOLD`), and vector store re-indexing.
-  - FR7.5.2: Dynamic regulatory docket ingestion (`POST /proceedings`) and deletion (`DELETE /proceedings/{id}`) with canonical coordinate segmentation (`Section → Paragraph`).
-  - FR7.5.3: Baseline All-New Section Analysis: When ingesting a new regulation with no prior baseline, all sections are processed as newly added (`diff_type = ADDED`), classified for substantive materiality and citation veracity, and mapped to enterprise projects.
-  - FR7.5.4: Non-destructive audit trail logging for all project and proceeding lifecycle events (`PROJECT_CREATED`, `PROJECT_DELETED`, `PROCEEDING_CREATED`, `PROCEEDING_DELETED`).
-- FR7.6: Persona-Driven Workspace User Interface:
-  - FR7.6.1: **Universal Header View Mode Switcher**: Seamless switching between Executive Dashboard, Project Lead View, and Compliance Analyst View.
-  - FR7.6.2: **Executive Dashboard (`DashboardView`)**:
+### FR7 — Dynamic Project Lifecycle & Multi-Persona Workspace
+- FR7.1: Dynamic Project & Regulatory Lifecycle Management:
+  - FR7.1.1: Dynamic project creation (`POST /projects`) and deletion (`DELETE /projects/{id}`) with assigned engineering leads, operational status (`ACTIVE`, `PLANNED`, `ON_HOLD`), and vector store re-indexing.
+  - FR7.1.2: Dynamic regulatory docket ingestion (`POST /proceedings`) and deletion (`DELETE /proceedings/{id}`) with canonical coordinate segmentation (`Section → Paragraph`).
+  - FR7.1.3: Baseline All-New Section Analysis: When ingesting a new regulation with no prior baseline, all sections are processed as newly added (`diff_type = ADDED`), classified for substantive materiality and citation veracity, and mapped to enterprise projects.
+- FR7.2: Persona-Driven Workspace User Interface:
+  - FR7.2.1: **Universal Header View Mode Switcher**: Seamless switching between Executive Dashboard, Project Lead View, and Compliance Analyst View.
+  - FR7.2.2: **Executive Dashboard (`DashboardView`)**:
     - High-level KPI overview (Capital Projects, Monitored Dockets, Governing Obligations, High-Urgency Directives, Expert Review Queue).
     - Summary of all enterprise projects, assigned leads, operational status, and open directive count.
     - Summary of all tracked regulatory dockets, jurisdictions, current version labels, filing dates, and status (`FINAL RULE` vs `PROPOSED`).
     - Consolidated Enterprise Compliance Directives Matrix tracking global resolution progress.
-  - FR7.6.3: **Project Lead View (`ProjectLeadView`)**:
+  - FR7.2.3: **Project Lead View (`ProjectLeadView`)**:
     - Persona filter and active project selector.
     - Project scope, description, and real-time compliance completion progress bar.
     - Applicable regulations per project with current versions and bindingness status (`FINAL RULE - ACT NOW` vs `PROPOSED - MONITOR`).
-    - Governing compliance obligations linked to the project.
-    - Assigned action directives inbox with interactive lifecycle state transitions (**`Accept Directive`**, **`✓ Mark Done`**, **`Modify Directive`**).
-  - FR7.6.4: **Compliance Analyst View (`ComplianceAnalystView`) & Document Inspection**:
+    - Governing compliance obligations linked to the project (including obligations adopted from approved directives).
+    - Execution inbox showing only compliance-approved directives with Stage-2 lifecycle controls (**`Accept Directive`** → IN_PROGRESS, **`✓ Mark Done`** → DONE, **`Modify`** → returns to compliance review with mandatory rationale).
+  - FR7.2.4: **Compliance Analyst View (`ComplianceAnalystView`) & Document Inspection**:
     - Docket portfolio workspace with filing status badges and live diff analysis trigger.
     - **Regulatory Versions & Internal Documents Explorer**: Clear display of all ingested proceeding versions (drafts, NOPRs, final rules) and governing internal documents (policies, procedures, contracts, interconnection agreements).
     - **Full-Text Side Panel Drawer**: Slide-over panel providing immediate inspection of the full unedited text of any regulation version or governing document, with canonical coordinate section jumping and search highlighting.
     - Downstream project impact mapping cross-referencing affected internal facilities and permits.
     - Side-by-side sequence alignment diff viewer with highlighted character offsets into immutable source snapshots.
-    - Non-destructive human override modal capturing reviewer modifications and mandatory audit justifications.
-    - Expert review queue resolution workflow allowing legal counsel to confirm or dismiss ambiguous statutory language with recorded justification.
-    - Living audit dossier explorer reconstructing immutable chronological event streams.
+    - **Compliance Review Inbox (Stage 1)**: Accept & Adopt Obligation (→ APPROVED), Reject, or Modify (with mandatory rationale) every routed directive; critical/low-confidence items are highlighted in the Expert Review Queue instead.
+    - Human override modal capturing reviewer modifications.
+    - Expert review queue resolution workflow allowing legal counsel to confirm or dismiss ambiguous statutory language.
 
 ## 6. Success Metrics (for the challenge demo)
 
@@ -143,16 +168,16 @@ Requires a global, consolidated cross-enterprise view of all capital projects, a
 | Change recall vs. precision | Every seeded material change in the test scenario is detected (recall), with minimal noise flagged as material when it isn't (precision) |
 | Impact mapping correctness | Every seeded obligation/project/document link in the test scenario is surfaced with correct rationale |
 | Escalation behavior | Every seeded "ambiguous" scenario is routed to Expert Review rather than confidently asserted |
-| Audit reconstructability | A reviewer can answer "why did we conclude X" for any item using only the audit trail, with zero access to chat/model logs |
+| Operational decision traceability | A reviewer can inspect "why did we conclude X" for any item using structured citations and recorded rationales, with zero access to chat/model logs |
 
 ## 7. Scope for the Build Challenge
 
 **In scope (must demo):**
 - Ingest ≥2 versions of one synthetic proceeding (draft + final, or draft v1 + draft v2 + final) with at least one status transition.
 - Synthetic company context: a handful of obligations, 1–2 projects, 1–2 governing documents, with owners.
-- End-to-end pipeline: ingest → diff → classify materiality → cite → map to company context → recommend action + route → log to living project state.
+- End-to-end pipeline: ingest → diff → classify materiality → cite → map to company context → recommend action + route → log to active project state.
 - At least one deliberately ambiguous change that triggers Expert Review escalation, to demonstrate FR6.
-- A viewable audit trail / project timeline for at least one obligation and one project.
+- A viewable compliance and project lead workspace for obligations and capital projects.
 
 **Explicitly deferred (mention as future work, not built):**
 - Live docket ingestion/connectors to government systems (e.g., regulations.gov, PUC filing systems).
@@ -175,3 +200,13 @@ Requires a global, consolidated cross-enterprise view of all capital projects, a
 - The compliance and regulation should be scoped to the energy sector in particular the electricy generation and transmission sector. 
 - Should action recommendations ever auto-execute (e.g., auto-update a document draft) or should all actions require human acceptance? MVP: always human-accepted, system never writes to a governing document autonomously, but highlight the confidence level of the action recommendation and the confidence score should be displayed in the UI.
 - How should conflicting interpretations from two different change records touching the same obligation be reconciled? MVP: both surface on the obligation's timeline; conflict itself becomes a Low-confidence flag for review.
+
+### 9.1 Core Operating Model (normative summary)
+
+The enterprise context is a **set of projects**, a **set of obligations**, and a **set of regulations**. Any change in a regulation is analyzed by:
+
+1. **Identify the changes** — deterministic version diffs + LLM materiality classifier (FR2), each grounded in verifiable citations (FR3).
+2. **Identify the impacted projects and obligations** — citation-grounded impact mapping (FR4).
+3. **Create actions for the compliance user to review** — directives enter `PENDING` in the Compliance Review Inbox; critical/low-confidence items are highlighted in the Expert Review Queue (FR6).
+4. **Compliance acceptance routes work to the project lead** — accepting a directive adopts it as a change in the project's obligations (`APPROVED`, per FR5.5).
+5. **Project lead executes** — the lead accepts the directive (`IN_PROGRESS`) or marks it done once the obligation is materialized (`DONE`).

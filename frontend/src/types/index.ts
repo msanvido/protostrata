@@ -10,7 +10,15 @@ export type ChangeType =
 
 export type ConfidenceTier = 'HIGH' | 'MEDIUM' | 'LOW';
 export type Urgency = 'MONITOR' | 'ACT_SOON' | 'ACT_NOW';
-export type ActionState = 'PENDING' | 'ACCEPTED' | 'MODIFIED' | 'REJECTED' | 'DONE';
+
+/**
+ * Two-stage action lifecycle (persona-owned transitions):
+ *   Stage 1 — Compliance review:  PENDING -> APPROVED (accept & adopt obligation) | REJECTED
+ *   Stage 2 — Project execution:  APPROVED -> IN_PROGRESS (lead accepts) | DONE (lead marks done)
+ *                                 IN_PROGRESS -> DONE
+ * Modifying a directive (with mandatory rationale) always returns it to PENDING compliance review.
+ */
+export type ActionState = 'PENDING' | 'APPROVED' | 'IN_PROGRESS' | 'REJECTED' | 'DONE';
 
 export interface Project {
   id: string;
@@ -90,12 +98,31 @@ export interface ChangeRecord {
 export interface ActionRecommendation {
   id: string;
   mapping_id: string;
+  change_id?: string;
   recommended_action: string;
   suggested_owner_id: string;
   urgency: Urgency;
   state: ActionState;
+  original_action?: string;
+  override_rationale?: string;
+  updated_by?: string;
+  state_note?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface ExpertReviewRecord {
+  id: string;
+  change_id?: string;
+  mapping_id?: string;
+  change_description: string;
+  signals: string[];
+  status: 'OPEN' | 'RESOLVED';
+  decision?: string;
+  reviewer_id?: string;
+  rationale?: string;
+  created_at?: string;
+  resolved_at?: string;
 }
 
 export interface EscalatedItem {
@@ -117,19 +144,4 @@ export interface AnalysisResult {
   change_records: ChangeRecord[];
   actions: ActionRecommendation[];
   escalated_items: EscalatedItem[];
-}
-
-export interface AuditEventItem {
-  id: string;
-  timestamp: string;
-  event_type: string;
-  actor: string;
-  summary: string;
-  payload: any;
-}
-
-export interface AuditDossier {
-  stream_id: string;
-  total_events: number;
-  reconstructed_timeline: AuditEventItem[];
 }

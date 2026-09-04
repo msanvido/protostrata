@@ -1,3 +1,5 @@
+import React, { useEffect, useState } from 'react';
+
 interface HeaderProps {
   viewMode: 'dashboard' | 'project_lead' | 'compliance_analyst';
   onViewModeChange: (mode: 'dashboard' | 'project_lead' | 'compliance_analyst') => void;
@@ -7,6 +9,19 @@ export const Header: React.FC<HeaderProps> = ({
   viewMode,
   onViewModeChange,
 }) => {
+  const [llmLabel, setLlmLabel] = useState<string>('mock (deterministic)');
+
+  useEffect(() => {
+    fetch('/health')
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (data?.llm_provider) {
+          setLlmLabel(data.llm_provider === 'mock' ? 'mock (deterministic)' : `${data.llm_provider}:${data.llm_model}`);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <header className="app-header">
       <div className="header-brand">
@@ -50,7 +65,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
         <div className="header-stat">
           <span className="stat-label">LLM Backend: </span>
-          <span className="stat-value">openrouter:gemini-2.5-flash</span>
+          <span className="stat-value">{llmLabel}</span>
         </div>
       </div>
     </header>

@@ -65,37 +65,59 @@ def main():
         # Expert resolves item
         target_id = item["mapping"]["id"] if item["mapping"] else item["change"]["id"]
         print(f"\n    [Resolving Item via Expert Reviewer 'u_counsel' (General Counsel)]...")
-        event = svc.resolve_expert_review(
+        res = svc.resolve_expert_review(
             target_id=target_id,
             reviewer_id="u_counsel",
             decision="CONFIRMED_NON_EXEMPT",
             rationale="Datacenter primary generation does not qualify under ancillary emergency exemptions."
         )
-        print(f"    - Resolution logged to event store: Event ID {event.id} ({event.event_type.value})")
+        print(f"    - Resolution recorded: Decision '{res['decision']}' by reviewer '{res['reviewer_id']}'")
 
-    # 4. Human Override
+    # 4. Two-Stage Action Lifecycle Demonstration (Compliance Review -> Project Lead Execution)
     actions = svc.repo.list_actions()
     if actions:
+        from strata.models.analysis import ActionState
         target_act = actions[0]
-        print(f"\n[4] Recording Human Override on Action '{target_act.id}' by Compliance Analyst 'u_compliance'...")
-        updated = svc.record_human_override(
-            action_id=target_act.id,
-            user_id="u_compliance",
-            updated_action_text="Mandate automated CEMS diagnostic sweeps daily in addition to quarterly filings.",
-            override_rationale="Strict state air quality oversight requires proactive telemetry audits."
+
+        print(f"\n[4] Two-Stage Action Lifecycle on Action '{target_act.id}' (owner: {target_act.suggested_owner_id})...")
+
+        # Stage 1: Compliance analyst reviews and accepts the directive (adopts the obligation)
+        print(f"    [Stage 1 - Compliance Review] Accepting directive as 'u_compliance'...")
+        approved = svc.transition_action_state(
+            target_act.id, "u_compliance", ActionState.APPROVED,
+            notes="Reviewed against enterprise scope; adopted as formal obligation."
         )
-        print(f"    - Action state transitioned to: {updated.state.value}")
-        print(f"    - Original system claim preserved alongside human override in append-only event log.")
+        print(f"    - State: PENDING -> {approved.state.value}; formal obligation 'OBL-ADOPTED-{target_act.id.replace('act_', '').upper()}' created and routed to project lead.")
 
-    # 5. Living Audit Dossier
-    print("\n[5] Generating Defensible Living Audit Dossier for 'obligation:OBL-CEMS-02'...")
-    dossier = svc.event_store.generate_audit_dossier("obligation:OBL-CEMS-02")
-    print(f"    - Total Historical Audit Events Reconstructed: {dossier['total_events']}")
-    for evt in dossier["reconstructed_timeline"][:4]:
-        print(f"      [{evt['timestamp']}] {evt['actor']} -> {evt['event_type']}: {evt['summary']}")
+        # Stage 2a: Project lead accepts the directive
+        lead = approved.suggested_owner_id
+        print(f"    [Stage 2 - Project Execution] Accepting directive as project lead '{lead}'...")
+        in_progress = svc.transition_action_state(target_act.id, lead, ActionState.IN_PROGRESS)
+        print(f"    - State: APPROVED -> {in_progress.state.value}")
 
-    # 6. Dynamic Project & Regulation Lifecycle with Baseline Analysis
-    print("\n[6] Dynamic Lifecycle: Adding New Project & Ingesting New Regulation Baseline...")
+        # Stage 2b: Project lead marks done once the obligation is materialized
+        done = svc.transition_action_state(target_act.id, lead, ActionState.DONE, notes="Obligation materialized in operations.")
+        print(f"    - State: IN_PROGRESS -> {done.state.value}")
+
+        # Invalid transition rejected by the persona-owned state machine
+        other = actions[1] if len(actions) > 1 else target_act
+        try:
+            svc.transition_action_state(other.id, "u_compliance", ActionState.DONE)
+        except ValueError as e:
+            print(f"    [Guardrail] Invalid transition blocked by the state machine: {str(e)[:110]}")
+
+        # Compliance modification of a still-pending directive (returns to PENDING with rationale)
+        if other is not target_act and other.state == ActionState.PENDING:
+            updated = svc.record_human_override(
+                action_id=other.id,
+                user_id="u_compliance",
+                updated_action_text="Mandate automated CEMS diagnostic sweeps daily in addition to quarterly filings.",
+                override_rationale="Strict state air quality oversight requires proactive telemetry audits."
+            )
+            print(f"    - Modified pending directive (state stays {updated.state.value}); original text & rationale persisted.")
+
+    # 5. Dynamic Project & Regulation Lifecycle with Baseline Analysis
+    print("\n[5] Dynamic Lifecycle: Adding New Project & Ingesting New Regulation Baseline...")
     # Add new project
     from strata.models.entities import Project, ProceedingStatus
     new_proj = Project(
@@ -133,10 +155,6 @@ Owners must retain all perimeter inspection records on-site for five years.
     print(f"      * Total Detected Requirements: {baseline_res['total_changes']}")
     print(f"      * Material Substantive Changes: {baseline_res['material_changes']}")
     print(f"      * Verifiable Citations Grounded: {len([c for c in baseline_res['change_records'] if c.get('after_citation')])}")
-    
-    # Audit log verification
-    proj_dossier = svc.event_store.generate_audit_dossier("project:PROJ-BESS-PEAKER-03")
-    print(f"    - Reconstructed Audit Events for '{new_proj.id}': {proj_dossier['total_events']} events")
 
     print("\n" + "=" * 80)
     print("STRATA MVP & FULL LIFECYCLE DEMONSTRATION COMPLETED SUCCESSFULLY.")

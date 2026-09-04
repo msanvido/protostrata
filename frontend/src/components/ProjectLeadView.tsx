@@ -8,7 +8,7 @@ interface ProjectLeadViewProps {
   actions: ActionRecommendation[];
   selectedProjectId?: string;
   onSelectProject: (id: string) => void;
-  onTransitionActionState: (actionId: string, newState: string) => void;
+  onTransitionActionState: (actionId: string, newState: string, actorId?: string) => void;
   onOpenOverride: (action: ActionRecommendation) => void;
   onOpenNewProject: () => void;
 }
@@ -55,7 +55,9 @@ export const ProjectLeadView: React.FC<ProjectLeadViewProps> = ({
   };
 
   const getProjectActions = (proj: Project) => {
-    return actions.filter(a => a.suggested_owner_id === proj.owner_id);
+    // Only directives approved by compliance reach the project lead's execution inbox
+    return actions.filter(a => a.suggested_owner_id === proj.owner_id
+      && (a.state === 'APPROVED' || a.state === 'IN_PROGRESS' || a.state === 'DONE'));
   };
 
   const getProjectObligations = (proj: Project) => {
@@ -220,8 +222,9 @@ export const ProjectLeadView: React.FC<ProjectLeadViewProps> = ({
           const projectActions = getProjectActions(project);
           const totalActions = projectActions.length;
           const doneActions = projectActions.filter(a => a.state === 'DONE').length;
-          const acceptedActions = projectActions.filter(a => a.state === 'ACCEPTED').length;
-          const pendingActions = projectActions.filter(a => a.state === 'PENDING').length;
+          const inProgressActions = projectActions.filter(a => a.state === 'IN_PROGRESS').length;
+          const awaitingLeadActions = projectActions.filter(a => a.state === 'APPROVED').length;
+          const pendingReviewCount = actions.filter(a => a.suggested_owner_id === project.owner_id && a.state === 'PENDING').length;
           const progressPercent = totalActions > 0 ? Math.round((doneActions / totalActions) * 100) : 100;
           const projectObligations = getProjectObligations(project);
           const applicableProceedings = getApplicableRegulations(project);
@@ -365,19 +368,22 @@ export const ProjectLeadView: React.FC<ProjectLeadViewProps> = ({
                   <div>
                     <h3>Project Lead Actions & Workstream Directives ({project.name})</h3>
                     <p style={{ fontSize: '0.78rem', color: '#9ca3af', margin: '2px 0 0 0' }}>
-                      Actionable directives assigned to {project.owner_id}. Review, accept, or mark tasks as completed.
+                      Directives approved by compliance and adopted as obligations. Accept a directive to begin
+                      work, and mark it done once the obligation is materialized.
+                      {pendingReviewCount > 0 && ` ${pendingReviewCount} further directive(s) still awaiting compliance review.`}
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <span className="badge badge-proposed">{pendingActions} Pending</span>
-                    <span className="badge badge-high">{acceptedActions} In Progress</span>
+                    <span className="badge badge-proposed">{awaitingLeadActions} To Accept</span>
+                    <span className="badge badge-high">{inProgressActions} In Progress</span>
                     <span className="badge badge-final">{doneActions} Done</span>
                   </div>
                 </div>
 
                 {projectActions.length === 0 ? (
                   <p style={{ fontSize: '0.85rem', color: '#9ca3af', fontStyle: 'italic', padding: '1rem 0' }}>
-                    No pending action recommendations for this project lead. Run Live Analysis on a docket to generate actionable directives.
+                    No directives have been approved by compliance for this project yet. Approved directives will
+                    appear here as adopted obligations once the compliance analyst accepts them.
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -392,42 +398,53 @@ export const ProjectLeadView: React.FC<ProjectLeadViewProps> = ({
                               <span className={`badge ${action.urgency === 'ACT_NOW' ? 'badge-material' : 'badge-proposed'}`}>
                                 {action.urgency}
                               </span>
-                              <span className={`badge ${action.state === 'DONE' ? 'badge-final' : action.state === 'ACCEPTED' ? 'badge-high' : 'badge-proposed'}`}>
-                                State: {action.state}
+                              <span className={`badge ${action.state === 'DONE' ? 'badge-final' : action.state === 'IN_PROGRESS' ? 'badge-high' : 'badge-proposed'}`}>
+                                {action.state === 'APPROVED' ? 'Approved — Awaiting Acceptance' : action.state === 'IN_PROGRESS' ? 'In Progress' : action.state}
                               </span>
                             </div>
                             <p style={{ fontSize: '0.88rem', color: '#f3f4f6', margin: '0.5rem 0' }}>
                               {action.recommended_action}
                             </p>
+                            {action.original_action && (
+                              <p style={{ fontSize: '0.72rem', color: '#9ca3af', margin: '0.25rem 0 0 0' }}>
+                                Originally recommended: <em>{action.original_action}</em>
+                                {action.override_rationale && ` — rationale: ${action.override_rationale}`}
+                              </p>
+                            )}
                           </div>
 
-                          {/* State Transition & Human Override Controls */}
+                          {/* Lead execution controls: Accept Directive / Mark Done / Modify */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            {action.state !== 'ACCEPTED' && action.state !== 'DONE' && (
+                            {action.state === 'APPROVED' && (
                               <button
                                 className="btn btn-secondary btn-sm"
                                 style={{ fontSize: '0.75rem' }}
-                                onClick={() => onTransitionActionState(action.id, 'ACCEPTED')}
+                                onClick={() => onTransitionActionState(action.id, 'IN_PROGRESS', action.suggested_owner_id)}
                               >
                                 Accept Directive
                               </button>
                             )}
-                            {action.state !== 'DONE' && (
-                              <button
-                                className="btn btn-primary btn-sm"
-                                style={{ fontSize: '0.75rem', background: '#10b981', borderColor: '#10b981' }}
-                                onClick={() => onTransitionActionState(action.id, 'DONE')}
-                              >
-                                ✓ Mark Done
-                              </button>
+                            {(action.state === 'APPROVED' || action.state === 'IN_PROGRESS') && (
+                              <>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  style={{ fontSize: '0.75rem', background: '#10b981', borderColor: '#10b981' }}
+                                  onClick={() => onTransitionActionState(action.id, 'DONE', action.suggested_owner_id)}
+                                >
+                                  ✓ Mark Done
+                                </button>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  style={{ fontSize: '0.75rem' }}
+                                  onClick={() => onOpenOverride(action)}
+                                >
+                                  Modify
+                                </button>
+                              </>
                             )}
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              style={{ fontSize: '0.75rem' }}
-                              onClick={() => onOpenOverride(action)}
-                            >
-                              Modify Directive
-                            </button>
+                            {action.state === 'DONE' && (
+                              <span className="badge badge-final">✓ Completed</span>
+                            )}
                           </div>
                         </div>
                       </div>

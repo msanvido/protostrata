@@ -4,7 +4,7 @@ import type { ActionRecommendation } from '../types';
 interface HumanOverrideModalProps {
   action: ActionRecommendation | null;
   onClose: () => void;
-  onSubmit: (actionId: string, updatedText: string, rationale: string) => Promise<void>;
+  onSubmit: (action: ActionRecommendation, updatedText: string, rationale: string) => Promise<void>;
 }
 
 export const HumanOverrideModal: React.FC<HumanOverrideModalProps> = ({
@@ -32,7 +32,7 @@ export const HumanOverrideModal: React.FC<HumanOverrideModalProps> = ({
     }
     try {
       setIsSubmitting(true);
-      await onSubmit(action.id, updatedText, rationale);
+      await onSubmit(action, updatedText, rationale);
       onClose();
     } catch (err) {
       alert('Failed to record override: ' + err);
@@ -52,7 +52,7 @@ export const HumanOverrideModal: React.FC<HumanOverrideModalProps> = ({
         </div>
         <div className="modal-body">
           <p style={{ fontSize: '0.82rem', color: '#9ca3af' }}>
-            Original system recommendations are preserved in the immutable event log alongside your revised instruction for full audit defensibility.
+            Original system recommendations and revised instructions are recorded with defensible rationale directly in the database.
           </p>
 
           <div className="form-group">

@@ -9,10 +9,10 @@ vi.mock('../api/client', () => ({
     getProceedings: vi.fn(),
     getObligations: vi.fn(),
     getActions: vi.fn(),
+    getExpertReviews: vi.fn(),
     runAnalysis: vi.fn(),
     recordOverride: vi.fn(),
     resolveExpertReview: vi.fn(),
-    getAuditDossier: vi.fn(),
     transitionAction: vi.fn(),
     createProject: vi.fn(),
     deleteProject: vi.fn(),
@@ -25,6 +25,7 @@ vi.mock('../api/client', () => ({
 describe('Strata Full React App Integration Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(api.getExpertReviews).mockResolvedValue([]);
 
     vi.mocked(api.getProjects).mockResolvedValue([
       {
@@ -94,21 +95,6 @@ describe('Strata Full React App Integration Tests', () => {
         state: 'PENDING'
       }
     ]);
-
-    vi.mocked(api.getAuditDossier).mockResolvedValue({
-      stream_id: 'obligation:OBL-CEMS-02',
-      total_events: 1,
-      reconstructed_timeline: [
-        {
-          id: 'evt_01',
-          timestamp: '2026-09-02 12:00:00',
-          event_type: 'IMPACT_MAPPED',
-          actor: 'SYSTEM:pipeline:impact_mapper',
-          summary: 'Impact mapped to OBL-CEMS-02.',
-          payload: {}
-        }
-      ]
-    });
   });
 
   it('loads initial data and renders Executive Dashboard by default', async () => {
@@ -148,7 +134,7 @@ describe('Strata Full React App Integration Tests', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Monitored Docket:/i)).toBeInTheDocument();
-      expect(screen.getByText(/Run Live Analysis/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Run Live Analysis/i).length).toBeGreaterThan(0);
       expect(screen.getByText(/Downstream Impacts/i)).toBeInTheDocument();
     });
 
@@ -178,23 +164,16 @@ describe('Strata Full React App Integration Tests', () => {
           to_version_id: 'FERC-RM22-14_final_rule',
           change_type: 'DEADLINE_SHIFT',
           materiality: 'MATERIAL',
-          description: 'FERC Order 2023 mandates 150 calendar day cluster studies.',
+          description: 'Interconnection study timeframe reduced from 150 to 60 days.',
           confidence: 'HIGH',
-          confidence_signals: [],
-          after_citation: {
-            document_id: 'FERC-RM22-14',
-            version_id: 'final_rule',
-            section_id: 'sec_1',
-            para_id: 'p1',
-            quoted_text: 'must complete all cluster studies within 150 calendar days.'
-          }
+          confidence_signals: []
         }
       ],
       actions: [
         {
           id: 'act_ferc_01',
           mapping_id: 'map_01',
-          recommended_action: 'Revise Mojave Solar grid interconnection milestones.',
+          recommended_action: 'Accelerate milestone engineering for interconnection queue.',
           suggested_owner_id: 'u_solar_lead',
           urgency: 'ACT_NOW',
           state: 'PENDING'
@@ -210,7 +189,7 @@ describe('Strata Full React App Integration Tests', () => {
     fireEvent.click(compViewBtn);
 
     // Click Run Live Analysis
-    const runBtn = screen.getByRole('button', { name: /Run Live Analysis/i });
+    const runBtn = screen.getAllByRole('button', { name: /Run Live Analysis/i })[0];
     fireEvent.click(runBtn);
 
     await waitFor(() => {

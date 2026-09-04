@@ -107,28 +107,36 @@ CREATE TABLE IF NOT EXISTS impact_mappings (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. Action Recommendations & State Tracking
+-- 8. Action Recommendations & Two-Stage Review State Tracking
+-- Lifecycle: PENDING -> APPROVED (compliance) -> IN_PROGRESS (lead) -> DONE (lead); REJECTED (compliance, terminal)
 CREATE TABLE IF NOT EXISTS actions (
     id TEXT PRIMARY KEY,
     mapping_id TEXT NOT NULL REFERENCES impact_mappings(id) ON DELETE CASCADE,
     recommended_action TEXT NOT NULL,
     suggested_owner_id TEXT NOT NULL REFERENCES users(id),
     urgency TEXT CHECK(urgency IN ('MONITOR', 'ACT_SOON', 'ACT_NOW')) NOT NULL,
-    state TEXT CHECK(state IN ('PENDING', 'ACCEPTED', 'MODIFIED', 'REJECTED', 'DONE')) DEFAULT 'PENDING',
+    state TEXT CHECK(state IN ('PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'DONE')) DEFAULT 'PENDING',
+    original_action TEXT,
+    override_rationale TEXT,
+    updated_by TEXT,
+    state_note TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Append-Only Audit Event Log
-CREATE TABLE IF NOT EXISTS audit_events (
+-- 9. Expert Review Queue (persisted low-confidence escalations & determinations)
+CREATE TABLE IF NOT EXISTS expert_reviews (
     id TEXT PRIMARY KEY,
-    stream_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    actor_type TEXT CHECK(actor_type IN ('SYSTEM', 'USER')) NOT NULL,
-    actor_id TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    linked_citations_json TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    change_id TEXT,
+    mapping_id TEXT,
+    change_description TEXT NOT NULL,
+    signals_json TEXT,
+    status TEXT CHECK(status IN ('OPEN', 'RESOLVED')) DEFAULT 'OPEN',
+    decision TEXT,
+    reviewer_id TEXT,
+    rationale TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP
 );
 
 -- 10. Semantic Vector Embeddings Store
@@ -162,8 +170,49 @@ class Database:
 
     def _init_db(self):
         conn = self.get_connection()
+        self._migrate_legacy_schema(conn)
         conn.executescript(SCHEMA_SQL)
         conn.commit()
+
+    def _migrate_legacy_schema(self, conn):
+        """Upgrades databases created before the two-stage action lifecycle.
+
+        Legacy `actions` rows used states ACCEPTED/MODIFIED; they map to
+        APPROVED/PENDING in the cleaned-up lifecycle. Audit columns and the
+        expert_reviews table are added for older files in place.
+        """
+        row = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='actions'").fetchone()
+        if row and "APPROVED" not in (row[0] or ""):
+            conn.executescript("""
+                CREATE TABLE actions_new (
+                    id TEXT PRIMARY KEY,
+                    mapping_id TEXT NOT NULL REFERENCES impact_mappings(id) ON DELETE CASCADE,
+                    recommended_action TEXT NOT NULL,
+                    suggested_owner_id TEXT NOT NULL REFERENCES users(id),
+                    urgency TEXT CHECK(urgency IN ('MONITOR', 'ACT_SOON', 'ACT_NOW')) NOT NULL,
+                    state TEXT CHECK(state IN ('PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'DONE')) DEFAULT 'PENDING',
+                    original_action TEXT,
+                    override_rationale TEXT,
+                    updated_by TEXT,
+                    state_note TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+                INSERT INTO actions_new (id, mapping_id, recommended_action, suggested_owner_id, urgency, state,
+                                         created_at, updated_at)
+                    SELECT id, mapping_id, recommended_action, suggested_owner_id, urgency,
+                           CASE state WHEN 'ACCEPTED' THEN 'APPROVED' WHEN 'MODIFIED' THEN 'PENDING' ELSE state END,
+                           created_at, updated_at
+                    FROM actions;
+                DROP TABLE actions;
+                ALTER TABLE actions_new RENAME TO actions;
+            """)
+        # Ensure audit columns exist on any pre-existing actions table
+        if row:
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(actions)").fetchall()}
+            for col in ("original_action", "override_rationale", "updated_by", "state_note"):
+                if col not in cols:
+                    conn.execute(f"ALTER TABLE actions ADD COLUMN {col} TEXT")
 
     def reset(self):
         if self._shared_conn is not None:

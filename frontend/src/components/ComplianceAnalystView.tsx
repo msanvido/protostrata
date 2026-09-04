@@ -6,14 +6,12 @@ import type {
   ChangeRecord, 
   ActionRecommendation, 
   EscalatedItem, 
-  AuditDossier,
   InternalDocument
 } from '../types';
 
 import { ChangeDiffViewer } from './ChangeDiffViewer';
 import { ActionInbox } from './ActionInbox';
 import { ExpertReviewQueue } from './ExpertReviewQueue';
-import { AuditTimelineStream } from './AuditTimelineStream';
 import { FullTextDrawer } from './FullTextDrawer';
 
 interface ComplianceAnalystViewProps {
@@ -24,8 +22,6 @@ interface ComplianceAnalystViewProps {
   changeRecords: ChangeRecord[];
   actions: ActionRecommendation[];
   escalatedItems: EscalatedItem[];
-  dossier: AuditDossier | null;
-  isDossierLoading: boolean;
   currentProceeding: string;
   isAnalyzing: boolean;
   onProceedingChange: (val: string) => void;
@@ -34,7 +30,6 @@ interface ComplianceAnalystViewProps {
   onOpenOverride: (action: ActionRecommendation) => void;
   onTransitionActionState: (actionId: string, newState: string) => void;
   onResolveExpert: (targetId: string, decision: string, rationale: string) => Promise<void>;
-  onFetchDossier: (streamId: string) => void;
 }
 
 export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
@@ -45,8 +40,6 @@ export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
   changeRecords,
   actions,
   escalatedItems,
-  dossier,
-  isDossierLoading,
   currentProceeding,
   isAnalyzing,
   onProceedingChange,
@@ -55,9 +48,8 @@ export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
   onOpenOverride,
   onTransitionActionState,
   onResolveExpert,
-  onFetchDossier,
 }) => {
-  const [subTab, setSubTab] = useState<'versions_docs' | 'impacts' | 'changes' | 'actions' | 'expert' | 'audit'>('versions_docs');
+  const [subTab, setSubTab] = useState<'versions_docs' | 'impacts' | 'changes' | 'actions' | 'expert'>('versions_docs');
 
   // Full Text Side Panel Drawer state
   const [activeFullText, setActiveFullText] = useState<{
@@ -165,6 +157,45 @@ export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
         </div>
       </div>
 
+      {/* Analysis Pending Banner if docket has not yet been analyzed */}
+      {changeRecords.length === 0 && (
+        <div
+          className="card"
+          style={{
+            marginBottom: '1.25rem',
+            padding: '1rem 1.25rem',
+            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12), rgba(99, 102, 241, 0.08))',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+              <span style={{ fontSize: '1.1rem' }}>⚡</span>
+              <strong style={{ color: '#f3f4f6', fontSize: '0.95rem' }}>
+                Regulatory Analysis Required for {selectedProc?.title || currentProceeding}
+              </strong>
+              <span className="badge badge-proposed">Analysis Pending</span>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.82rem', color: '#9ca3af' }}>
+              Differences between versions, materiality classifications, and downstream operational impact mappings have not yet been evaluated. Click <strong>"Run Live Analysis"</strong> to execute sequence alignment diffing and route actions.
+            </p>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={onRunAnalysis}
+            disabled={isAnalyzing}
+            style={{ fontWeight: 600, padding: '0.55rem 1.15rem' }}
+          >
+            ⚡ {isAnalyzing ? 'Analyzing Differences...' : 'Run Live Analysis'}
+          </button>
+        </div>
+      )}
+
       {/* Compliance Subnavigation */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.5rem', overflowX: 'auto' }}>
         <button
@@ -202,12 +233,6 @@ export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
               {escalatedItems.length}
             </span>
           )}
-        </button>
-        <button
-          className={`btn ${subTab === 'audit' ? 'btn-primary' : 'btn-ghost'} btn-sm`}
-          onClick={() => setSubTab('audit')}
-        >
-          Living Audit Dossier
         </button>
       </div>
 
@@ -372,7 +397,12 @@ export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
 
       {/* Subtab 3: Change Records & Citations */}
       {subTab === 'changes' && (
-        <ChangeDiffViewer changeRecords={changeRecords} />
+        <ChangeDiffViewer
+          changeRecords={changeRecords}
+          actions={actions}
+          onOpenOverride={onOpenOverride}
+          onTransitionActionState={onTransitionActionState}
+        />
       )}
 
       {/* Subtab 4: Action Inbox */}
@@ -389,15 +419,6 @@ export const ComplianceAnalystView: React.FC<ComplianceAnalystViewProps> = ({
         <ExpertReviewQueue
           escalatedItems={escalatedItems}
           onResolve={onResolveExpert}
-        />
-      )}
-
-      {/* Subtab 6: Living Audit Dossier */}
-      {subTab === 'audit' && (
-        <AuditTimelineStream
-          dossier={dossier}
-          isLoading={isDossierLoading}
-          onFetchDossier={onFetchDossier}
         />
       )}
 

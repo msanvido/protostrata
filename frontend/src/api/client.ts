@@ -4,7 +4,7 @@ import type {
   Proceeding, 
   ActionRecommendation, 
   AnalysisResult, 
-  AuditDossier,
+  ExpertReviewRecord,
   InternalDocument
 } from '../types';
 
@@ -102,7 +102,7 @@ export const api = {
     return res.json();
   },
 
-  async transitionAction(actionId: string, userId: string, newState: string, notes: string = ''): Promise<ActionRecommendation> {
+  async transitionAction(actionId: string, newState: string, userId: string, notes: string = ''): Promise<ActionRecommendation> {
     const params = new URLSearchParams({
       user_id: userId,
       new_state: newState,
@@ -112,6 +112,14 @@ export const api = {
       method: 'POST'
     });
     if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
+  async getExpertReviews(status?: string): Promise<ExpertReviewRecord[]> {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    const res = await fetch(`/expert_reviews?${params.toString()}`);
+    if (!res.ok) throw new Error('Failed to fetch expert reviews');
     return res.json();
   },
 
@@ -125,12 +133,6 @@ export const api = {
       method: 'POST'
     });
     if (!res.ok) throw new Error(await res.text());
-    return res.json();
-  },
-
-  async getAuditDossier(streamId: string): Promise<AuditDossier> {
-    const res = await fetch(`/audit/${encodeURIComponent(streamId)}`);
-    if (!res.ok) throw new Error('Failed to fetch audit dossier');
     return res.json();
   }
 };

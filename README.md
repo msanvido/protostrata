@@ -11,9 +11,39 @@ Strata is a **change-to-action workspace** that bridges the gap between external
 1. **Citation-First, Zero Hallucination**: Every material claim is anchored to machine-verifiable paragraph/sentence coordinates checked by deterministic code against immutable document snapshots.
 2. **Deterministic Diffing with Probabilistic Interpretation**: Mechanical text deltas are detected via sequence alignment algorithms; LLMs are bounded strictly to semantic interpretation, materiality scoring, and impact reasoning.
 3. **Draft vs. Final Gating**: Proceeding status gates action urgency (`DRAFT` / `PROPOSED` = `MONITOR`, `FINAL` = `ACT_NOW`).
-4. **Transparent Confidence Gating**: Ambiguous statutory phrases automatically downgrade confidence to `LOW` and route to an **Expert Review Queue** rather than generating unauthorized operational tasks.
-5. **Living, Event-Sourced Audit State**: SQLite relational database with an append-only event store (`audit_events`). Human overrides never overwrite system claims—both are preserved chronologically for examination defense.
-6. **Multi-Provider LLM Integration**: Natively supports Google Gemini (`google/gemini-2.5-flash` default), Anthropic Claude, OpenAI, OpenRouter, and local Ollama, with offline deterministic fallback.
+4. **Transparent Confidence Gating**: Ambiguous statutory phrases automatically downgrade confidence to `LOW` and are highlighted in the **Expert Review Queue** (persisted in SQLite) rather than generating unauthorized operational tasks.
+5. **Two-Stage, Persona-Owned Action Lifecycle**: Nothing reaches a project team without compliance sign-off. Compliance reviews every routed directive first; only then does it reach the project lead as a change in their obligations; the lead accepts it for execution and marks it done once materialized.
+6. **Human In The Loop & Audit Attribution**: Every transition and modification records the acting user, mandatory rationale, and preserved original directive text directly in SQLite.
+7. **Multi-Provider LLM Integration**: Natively supports Google Gemini (`google/gemini-2.5-flash` default), Anthropic Claude, OpenAI, OpenRouter, and local Ollama, with offline deterministic fallback.
+
+---
+
+## The Two-Stage Action Lifecycle
+
+Strata turns regulatory changes into executed work through a strict, persona-owned flow:
+
+```
+Regulation change detected (diff + classifier)
+        │
+        ▼
+Impacted projects & obligations identified (impact mapping)
+        │
+        ▼
+┌─ STAGE 1 · COMPLIANCE REVIEW ─────────────────────────────────────────────┐
+│  PENDING: directive queued in the Compliance Review Inbox                 │
+│  ✓ Accept & Adopt Obligation → APPROVED (formal obligation created)       │
+│  ✕ Reject                    → REJECTED (terminal)                        │
+│  Modify (mandatory rationale) → stays PENDING, original text preserved    │
+└───────────────────────────────────────────────────────────────────────────┘
+        │  approved directives appear to the project lead as obligation changes
+        ▼
+┌─ STAGE 2 · PROJECT EXECUTION ─────────────────────────────────────────────┐
+│  Accept Directive → IN_PROGRESS (lead accepts the work)                   │
+│  ✓ Mark Done      → DONE (obligation materialized)                        │
+└───────────────────────────────────────────────────────────────────────────┘
+```
+
+Transitions are **enforced server-side** — the wrong persona (or an illegal jump such as `PENDING → DONE`) is rejected with a 409 listing the allowed transitions. Low-confidence/critical items never enter the flow until counsel resolves them in the Expert Review Queue.
 
 ---
 
@@ -36,6 +66,7 @@ Using `make` (simplest):
 make install     # Installs Python & Node dependencies
 make build       # Compiles React frontend into production assets
 make run         # Starts backend & opens the React UI in your browser
+make reset-db    # Resets SQLite database to empty schema (no seed data)
 make test        # Runs all test suites (UI, BDD, and Unit/Integration)
 ```
 
@@ -45,7 +76,15 @@ pip install -r requirements.txt
 npm --prefix frontend install && npm --prefix frontend run build
 python3 run.py
 ```
-This automatically seeds the database, launches the server, and opens your browser to **http://localhost:8000** (or visit **http://localhost:8000/docs** for the interactive Swagger API).
+This seeds the database on first run (restarts preserve your workspace state; use `make reset-db` or `POST /reset` to start over), launches the server, and opens your browser to **http://localhost:8000** (or visit **http://localhost:8000/docs** for the interactive Swagger API).
+
+### Walking the full flow in the UI (5 minutes)
+
+1. **Compliance Analyst View** → pick a docket → **⚡ Run Live Analysis**. Change records, citations, and routed directives appear; ambiguous items land highlighted in the **Expert Review Queue**.
+2. *(Optional)* Resolve an Expert Review item with a mandatory rationale — confirming it releases the directive into the review inbox.
+3. In the **Compliance Action Inbox**, click **✓ Accept & Adopt Obligation** (or **✕ Reject** / **Modify Directive**). The directive becomes a formal obligation.
+4. Switch to **Project Lead View** → select the project: the approved directive now appears as a change in the project's obligations. Click **Accept Directive**, then **✓ Mark Done** once the work is materialized.
+5. Check the **Executive Dashboard** to see every directive's position in the lifecycle (Awaiting Compliance Review → With Project Leads → Done).
 
 ---
 
@@ -61,7 +100,7 @@ npm test
 ```
 
 ### 2. Cucumber / Gherkin BDD Acceptance Suite
-Executes business user-story acceptance tests covering change detection, expert escalation, impact mapping, and living audit trails:
+Executes business user-story acceptance tests covering change detection, expert escalation, and impact mapping:
 ```bash
 PYTHONPATH=. behave features/
 ```
@@ -76,7 +115,7 @@ PYTHONPATH=. pytest -v tests/
 
 ## Interactive CLI Demonstration
 
-Run the complete 6-stage compliance lifecycle directly from your terminal:
+Run the complete compliance lifecycle directly from your terminal — including the full two-stage action lifecycle (compliance acceptance → project lead execution → done) and the state-machine guardrails:
 ```bash
 # Default: Live LLM with google/gemini-2.5-flash via OpenRouter
 PYTHONPATH=. python3 strata/cli.py
@@ -115,7 +154,7 @@ protostrata/
 ├── frontend/                  # React 19 + TypeScript + Vite Workspace SPA
 │   ├── src/
 │   │   ├── components/        # Header, OverviewTab, ChangeDiffViewer, ActionInbox,
-│   │   │                      # HumanOverrideModal, ExpertReviewQueue, AuditTimelineStream
+│   │   │                      # HumanOverrideModal, ExpertReviewQueue
 │   │   ├── api/client.ts      # Typed API client calling FastAPI endpoints
 │   │   ├── types/index.ts     # TypeScript interfaces matching backend models
 │   │   ├── test/              # Vitest & React Testing Library automated test suite
@@ -126,10 +165,10 @@ protostrata/
 │   ├── api/                   # FastAPI application & route definitions
 │   ├── evals/                 # Golden dataset, PromptEvaluator, and GEPA optimizer
 │   ├── llm/                   # Multi-provider LLM client (OpenRouter, Gemini, Claude, OpenAI)
-│   ├── models/                # Pydantic domain entities, analysis records, and audit events
+│   ├── models/                # Pydantic domain entities and analysis records
 │   ├── parser/                # Document extractors (PyMuPDF, BS4) and segmenters
 │   ├── pipeline/              # DiffEngine, CitationValidator, ChangeClassifier, ImpactMapper
-│   ├── storage/               # SQLite database manager, repository layer, and append-only event store
+│   ├── storage/               # SQLite database manager and relational repository layer
 │   ├── cli.py                 # Interactive terminal demonstration script
 │   └── seed.py                # Database seeder with real energy regulations & projects
 │

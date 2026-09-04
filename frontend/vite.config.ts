@@ -11,9 +11,11 @@ export default defineConfig({
       '/proceedings': 'http://127.0.0.1:8000',
       '/projects': 'http://127.0.0.1:8000',
       '/obligations': 'http://127.0.0.1:8000',
+      '/documents': 'http://127.0.0.1:8000',
       '/analyze': 'http://127.0.0.1:8000',
       '/actions': 'http://127.0.0.1:8000',
       '/expert_review': 'http://127.0.0.1:8000',
+      '/expert_reviews': 'http://127.0.0.1:8000',
       '/audit': 'http://127.0.0.1:8000',
     }
   },

@@ -11,12 +11,12 @@ Version: 1.3 · Status: Approved MVP Technical Design · Companion to `Strata_PR
 ### 1.1 Overview & Scope
 Regulated enterprises face a continuous influx of regulatory proceedings (dockets, NPRMs, revised drafts, final orders) that affect internal obligations, governing documents (policies, SOPs, contracts), and capital projects. 
 
-Strata is a **change-to-action workspace** that ingests regulatory proceedings and enterprise context, computes deterministic diffs, extracts verifiable citations, maps impacts to company assets via dense embeddings, and routes actionable tasks to owners under a living, event-sourced audit trail.
+Strata is a **change-to-action workspace** that ingests regulatory proceedings and enterprise context, computes deterministic diffs, extracts verifiable citations, maps impacts to company assets via dense embeddings, and routes actionable tasks to owners under a clear operational review lifecycle.
 
 ### 1.2 Non-Negotiable Engineering Principles
 1. **Citation-First, Not Summary-First**: Every claim (detected change, mapped impact, or recommended action) is anchored to an addressable character span verified deterministically against immutable snapshots before display.
 2. **Deterministic Diff, Probabilistic Interpretation**: Mechanical text deltas are calculated using sequence alignment algorithms (`difflib`/LCS). LLMs are employed exclusively for bounded interpretation: classifying materiality and extracting regulatory rationale.
-3. **Append-Only Living State**: No entity state or audit record is overwritten in place. Corrections, updates, and human overrides are emitted as new domain events layered chronologically over historical records.
+3. **Structured Review Lifecycle**: Action directives progress through a persona-owned two-stage lifecycle (`PENDING` → `APPROVED` → `IN_PROGRESS`/`DONE`, or `REJECTED`). Human modifications record explicit rationale, preserve the original directive, and return the item to compliance review.
 4. **Confidence Gates Action**: A transparent multi-signal rubric governs confidence. Low-confidence or ambiguous items are structurally blocked by the state machine from creating pending operational actions and route exclusively to an Expert Review Queue.
 5. **Canonical Addressability**: Ingested proceedings and internal documents are parsed into a uniform coordinate tree (`doc_id → version_id → section_id → para_id → sentence_id → char_span`). Citations are stable, resolvable pointers.
 
@@ -51,7 +51,6 @@ flowchart TD
             documents & obligations & projects
             change_records & impact_mappings
             actions
-            audit_events (append-only)
             embeddings
         end
     end
@@ -74,7 +73,6 @@ flowchart TD
     subgraph Workspace["4. Operations Workspace (API & UI)"]
         DB --> Inbox[Reviewer Action Inbox]
         DB --> ExpertQueue[Expert Review Queue: Low-Confidence]
-        DB --> Timeline[Living Entity Timeline & Audit Dossier]
         Inbox -- Accept / Modify / Override --> DB
         ExpertQueue -- Resolve with Rationale --> DB
     end
@@ -85,29 +83,27 @@ flowchart TD
 | Subsystem | Key Components | Core Responsibility |
 |---|---|---|
 | **Ingestion** | `DocumentExtractor`, `DocumentSegmenter`, `MetadataExtractor` | Extracts clean text from PDF/HTML, generates addressable hierarchy with character spans, and extracts status (`DRAFT`, `PROPOSED`, `FINAL`). |
-| **Storage** | `Database`, `StrataRepository`, `EventStore` | Manages relational tables in SQLite (`strata.db`) with foreign key constraints, plus an append-only event store. |
+| **Storage** | `Database`, `StrataRepository` | Manages relational tables in SQLite (`strata.db`) with foreign key constraints. |
 | **Analysis Pipeline** | `DiffEngine`, `CitationValidator`, `ChangeClassifier` | Aligns paragraph sequences, validates verbatim quotations against snapshots, and classifies change types/materiality. |
 | **Impact & Routing** | `VectorStore`, `ImpactMapper`, `ConfidenceRubric`, `ActionRouter` | Uses dense embeddings to retrieve candidate enterprise assets, evaluates confidence signals, and deterministically resolves owners and urgency. |
-| **Living State & Audit** | `EventStore`, `StrataService` | Projects chronological entity timelines and generates exportable audit dossiers showing system claims alongside human decisions. |
-| **Workspace UI** | React + Vite (`frontend/`) & FastAPI Static | Modern Single-Page Application (SPA) built with React 19, TypeScript, and Vite, providing visual diff inspection, action management, expert escalation review, and audit timelines. |
+| **Workspace UI** | React + Vite (`frontend/`) & FastAPI Static | Modern Single-Page Application (SPA) built with React 19, TypeScript, and Vite, providing visual diff inspection, action management, and expert escalation review. |
 
 ### 2.3 Workspace UI Architecture & React Component Hierarchy
 
 The frontend is implemented as a modern, reactive single-page application (SPA) built with **React, TypeScript, and Vite** (located in `frontend/`), designed to run independently in development (`npm run dev` with Vite proxying to FastAPI `:8000`) or built into optimized production assets (`dist/`) served directly by the backend:
 
 1. **State Management & Data Layer**:
-   - Asynchronous query cache and optimistic mutation hooks querying the FastAPI REST endpoints (`/proceedings`, `/projects`, `/obligations`, `/actions`, `/analyze`, `/audit`).
+   - Asynchronous query cache and optimistic mutation hooks querying the FastAPI REST endpoints (`/proceedings`, `/projects`, `/obligations`, `/actions`, `/analyze`).
    - Active proceeding context and filter state maintained in reactive application state.
 
 2. **Component Hierarchy**:
    - `App`: Main layout shell with persistent Header and navigation tab switcher.
    - `Header`: Active proceeding dropdown (`FERC-RM22-14` vs `EPA-NSPS-KKKK`), dynamic status badge (`FINAL RULE` in emerald, `PROPOSED` in amber), LLM backend indicator, and live analysis trigger.
-   - `OverviewTab`: Executive metric cards (Active Projects, Obligations, Material Changes, Escalations) and asset summary cards.
-   - `ChangeDiffViewer`: Dual-column comparative citation viewer rendering before/after quoted spans with exact character highlights and confidence tiers.
-   - `ActionInbox`: Filterable action recommendations grouped by urgency (`ACT_NOW`, `MONITOR`, `MODIFIED`) with owner attribution chips.
-   - `HumanOverrideModal`: Accessible modal capturing non-destructive modified directives alongside mandatory reviewer audit rationales.
+   - `DashboardView`: Executive metric cards (Active Projects, Obligations, Material Changes, Escalations) and asset summary cards.
+   - `ChangeDiffViewer`: Dual-column comparative citation viewer rendering before/after quoted spans with exact character highlights, confidence tiers, and embedded action decision controls.
+   - `ActionInbox`: Compliance Review Inbox (Stage 1) filtering directives by lifecycle state (`PENDING`, `APPROVED`, `IN_PROGRESS`, `DONE`, `REJECTED`) with owner attribution chips.
+   - `HumanOverrideModal`: Accessible modal capturing non-destructive modified directives.
    - `ExpertReviewQueue`: Gated workflow for low-confidence items with trigger signal chips (`SIG_AMBIG_TERM`, `SIG_CITE_FAIL`) and inline resolution actions.
-   - `AuditTimelineStream`: Interactive event stream explorer reconstructing the defensible living compliance dossier for any entity.
 
 3. **Styling & Design System**:
    - Curated dark mode theme with glassmorphic depth, crisp typography (`Inter`, `JetBrains Mono`), and semantic status colors:
@@ -142,6 +138,9 @@ The frontend is implemented as a modern, reactive single-page application (SPA) 
    - **Fail-Safe Gate**: Failed citations are not discarded; they are demoted to `confidence = LOW` (`SIG_CITE_FAIL`) and enqueued for Expert Review.
 4. **Status Transition Detection**:
    - Any shift in proceeding status (e.g., `PROPOSED → FINAL`) immediately emits a high-salience `STATUS_TRANSITION` change record.
+5. **Expert Review Persistence**:
+   - Every escalated item is persisted to the `expert_reviews` table (status `OPEN`), so the queue survives analysis re-runs and page reloads.
+   - Counsel resolution records decision + reviewer + rationale. Confirming decisions release the underlying mapping to the compliance review inbox as a `PENDING` action; dismissals close the item with no operational task.
 
 ### 3.3 Semantic Retrieval & Dual-Grounded Impact Mapping
 1. **Embedding Search**:
@@ -159,11 +158,15 @@ The frontend is implemented as a modern, reactive single-page application (SPA) 
 1. **Deterministic Ownership Resolution**:
    - The model recommends *what* action to take; the system deterministically looks up *who* owns the affected asset via `owner_id`.
 2. **Deterministic Urgency Rules**:
-   - `status == DRAFT` or `PROPOSED` → Urgency capped at `MONITOR`.
-   - `status == FINAL` → Urgency set to `ACT_NOW` (or `ACT_SOON` if deadline $> 90$ days).
+   - `status == DRAFT` or `PROPOSED` → Urgency set to `MONITOR`.
+   - `status == FINAL` → Urgency set to `ACT_NOW`.
    - `STATUS_TRANSITION` to `FINAL` → Urgency set to `ACT_NOW`.
-3. **Action Lifecycle States**:
-   - `PENDING` → `ACCEPTED` | `MODIFIED` | `REJECTED` | `DONE`.
+   - (`ACT_SOON` is reserved for deadline-aware urgency once explicit deadline extraction lands; currently `MONITOR`/`ACT_NOW` only.)
+3. **Two-Stage Action Lifecycle States** (persona-owned, enforced by the service-layer state machine):
+   - **Stage 1 — Compliance Review**: `PENDING → APPROVED` (accept & adopt obligation) | `PENDING → REJECTED`.
+   - **Stage 2 — Project Execution**: `APPROVED → IN_PROGRESS` (lead accepts) | `APPROVED → DONE` (direct completion) | `IN_PROGRESS → DONE`.
+   - Any human modification of the directive text (mandatory rationale, original text preserved) returns the item to `PENDING` compliance review.
+   - Compliance approval (`APPROVED`) materializes the directive as a formal enterprise obligation (`OBL-ADOPTED-*`) owned by the affected asset's owner.
 
 ### 3.5 Confidence Rubric & Expert Review Gating
 Confidence is evaluated against an auditable, multi-signal rules engine:
@@ -199,8 +202,11 @@ CompanyContext:
 Analysis & Living State:
  ├── ChangeRecord (id, proceeding_id, from_version_id, to_version_id, change_type, materiality, description, before_citation, after_citation, confidence, confidence_signals)
  ├── ImpactMapping (id, change_id, affected_type: OBLIGATION | PROJECT | DOCUMENT, affected_id, rationale, change_citation, affected_citation, confidence)
- ├── ActionRecommendation (id, mapping_id, recommended_action, suggested_owner_id, urgency: MONITOR | ACT_SOON | ACT_NOW, state: PENDING | ACCEPTED | MODIFIED | REJECTED | DONE)
- └── AuditEvent (id, stream_id, event_type, actor_type: SYSTEM | USER, actor_id, payload, linked_citations, timestamp)
+ ├── ActionRecommendation (id, mapping_id, recommended_action, suggested_owner_id, urgency: MONITOR | ACT_SOON | ACT_NOW,
+ │                          state: PENDING | APPROVED | IN_PROGRESS | REJECTED | DONE,
+ │                          original_action, override_rationale, updated_by, state_note)
+ └── ExpertReview (id, change_id, mapping_id, change_description, signals, status: OPEN | RESOLVED,
+                   decision, reviewer_id, rationale, created_at, resolved_at)
 ```
 
 ### 4.2 Relational Database Schema (SQLite DDL)
@@ -211,7 +217,7 @@ CREATE TABLE users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    role TEXT CHECK(role IN ('REVIEWER', 'ASSIGNEE', 'LEAD', 'ADMIN')) NOT NULL,
+    role TEXT CHECK(role IN ('COMPLIANCE', 'PROJECT_LEAD', 'ADMIN')) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -308,21 +314,28 @@ CREATE TABLE actions (
     recommended_action TEXT NOT NULL,
     suggested_owner_id TEXT NOT NULL REFERENCES users(id),
     urgency TEXT CHECK(urgency IN ('MONITOR', 'ACT_SOON', 'ACT_NOW')) NOT NULL,
-    state TEXT CHECK(state IN ('PENDING', 'ACCEPTED', 'MODIFIED', 'REJECTED', 'DONE')) DEFAULT 'PENDING',
+    state TEXT CHECK(state IN ('PENDING', 'APPROVED', 'IN_PROGRESS', 'REJECTED', 'DONE')) DEFAULT 'PENDING',
+    original_action TEXT,
+    override_rationale TEXT,
+    updated_by TEXT,
+    state_note TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Append-Only Event Store Table
-CREATE TABLE audit_events (
+-- Expert Review Queue (persisted low-confidence escalations & determinations)
+CREATE TABLE expert_reviews (
     id TEXT PRIMARY KEY,
-    stream_id TEXT NOT NULL,
-    event_type TEXT NOT NULL,
-    actor_type TEXT CHECK(actor_type IN ('SYSTEM', 'USER')) NOT NULL,
-    actor_id TEXT NOT NULL,
-    payload_json TEXT NOT NULL,
-    linked_citations_json TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    change_id TEXT,
+    mapping_id TEXT,
+    change_description TEXT NOT NULL,
+    signals_json TEXT,
+    status TEXT CHECK(status IN ('OPEN', 'RESOLVED')) DEFAULT 'OPEN',
+    decision TEXT,
+    reviewer_id TEXT,
+    rationale TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    resolved_at TIMESTAMP
 );
 
 -- Vector Embeddings Table
@@ -336,19 +349,9 @@ CREATE TABLE embeddings (
 );
 ```
 
-### 4.3 Append-Only Event Sourcing
-- Every analytical determination, state transition, and human override emits an immutable `AuditEvent`:
-  - `PROCEEDING_VERSION_INGESTED`
-  - `DOCUMENT_INGESTED`
-  - `CHANGE_DETECTED`
-  - `STATUS_TRANSITION_DETECTED`
-  - `IMPACT_MAPPED`
-  - `ACTION_RECOMMENDED`
-  - `ACTION_ESCALATED_TO_EXPERT`
-  - `EXPERT_REVIEW_RESOLVED`
-  - `ACTION_STATE_CHANGED`
-  - `HUMAN_OVERRIDE_RECORDED`
-- Read models (Reviewer Inbox, Expert Review Queue, Entity Living Timelines) are projections folded from this append-only stream.
+### 4.3 Relational Entity Persistence
+- Core domain entities (proceedings, versions, paragraphs, documents, obligations, projects, change records, impact mappings, and actions) are stored in SQLite relational tables with foreign keys and cascaded deletions.
+- State transitions, human overrides, and expert review determinations update active records directly with transition timestamps and audit-defensible rationales.
 
 ### 4.4 State Machines & Lifecycle Transitions
 
@@ -364,12 +367,20 @@ stateDiagram-v2
         PROPOSED --> WITHDRAWN: Struck Down / Abandoned
     end
 
-    subgraph Action_Lifecycle["2. Routed Operational Action"]
-        PENDING --> ACCEPTED: Owner Accepts Directive
-        PENDING --> MODIFIED: Reviewer Records Human Override
-        ACCEPTED --> DONE: Work Completed & Audited
-        MODIFIED --> DONE: Work Completed & Audited
-        PENDING --> REJECTED: Inapplicable upon Expert Review
+    subgraph Action_Lifecycle["2. Two-Stage Routed Operational Action"]
+        state "Stage 1 · Compliance Review" as stage1 {
+            PENDING --> APPROVED: Compliance Accepts & Adopts Obligation
+            PENDING --> REJECTED: Compliance Rejects (terminal)
+            PENDING --> PENDING: Modify w/ Mandatory Rationale
+        }
+        state "Stage 2 · Project Execution" as stage2 {
+            APPROVED --> IN_PROGRESS: Project Lead Accepts Directive
+            APPROVED --> DONE: Lead Marks Done (direct)
+            IN_PROGRESS --> DONE: Lead Marks Done (materialized)
+            APPROVED --> PENDING: Lead Modify → re-review
+            IN_PROGRESS --> PENDING: Lead Modify → re-review
+        }
+        stage1 --> stage2
     end
 
     subgraph Project_Lifecycle["3. Enterprise Capital Project"]
@@ -380,8 +391,21 @@ stateDiagram-v2
     end
 
     Regulation_Lifecycle --> Action_Lifecycle: Status=FINAL elevates Urgency to ACT_NOW
-    Action_Lifecycle --> Project_Lifecycle: Completed actions advance project milestones
+    Action_Lifecycle --> Project_Lifecycle: Approved directives materialize as obligations; completed actions advance project milestones
 ```
+
+**Persona ownership of transitions (enforced in `StrataService.transition_action_state`):**
+
+| Transition | Required Role | Semantic |
+|---|---|---|
+| `PENDING → APPROVED` | `COMPLIANCE` | Directive passes compliance review; adopted as formal obligation and routed to the project lead |
+| `PENDING → REJECTED` | `COMPLIANCE` | Directive dismissed as inapplicable/duplicative (terminal) |
+| `APPROVED → IN_PROGRESS` | `PROJECT_LEAD` | Lead accepts the directive; work starts |
+| `APPROVED → DONE` | `PROJECT_LEAD` | Obligation already materialized; lead closes directly |
+| `IN_PROGRESS → DONE` | `PROJECT_LEAD` | Obligation materialized |
+| *(any open state)* `→ PENDING` via override | `COMPLIANCE` (on PENDING) / `PROJECT_LEAD` (on APPROVED/IN_PROGRESS) | Directive text modified with mandatory rationale; re-enters compliance review |
+
+`ADMIN` may perform any transition. Violations raise a 409 with the allowed transitions listed.
 
 #### 4.4.1 Regulation Proceeding States (`ProceedingStatus`)
 | State | Legal Character | Enterprise Action Posture | Action Urgency |
@@ -402,13 +426,22 @@ stateDiagram-v2
 | **`COMPLETED`** | Commercial operation date (COD) achieved; energized. | Transitions to steady-state periodic compliance reporting. |
 
 #### 4.4.3 Action Recommendation States (`ActionState`)
+Two-stage, persona-owned lifecycle. A directive is never visible to the project lead until compliance approves it, and only the lead can complete it.
+
+**Stage 1 — Compliance Review**
 | State | Definition | Transition Mechanism |
 |---|---|---|
-| **`PENDING`** | System-recommended directive assigned to owner. | Created automatically when impact is mapped with High/Medium confidence. |
-| **`ACCEPTED`** | Owner confirms and adopts the directive into project tasks. | Triggered via `POST /actions/{id}/transition?new_state=ACCEPTED`. |
-| **`MODIFIED`** | Human reviewer adjusts text or scope with mandatory rationale. | Triggered via `POST /actions/{id}/override` (non-destructive override). |
-| **`REJECTED`** | Item marked inapplicable or duplicative. | Triggered via review resolution; recorded in event store. |
-| **`DONE`** | Physical or administrative compliance work completed. | Triggered via `POST /actions/{id}/transition?new_state=DONE`. |
+| **`PENDING`** | System-recommended directive awaiting compliance review. | Created automatically when an impact mapping with High/Medium confidence is routed; or when a modified directive re-enters review. |
+| **`APPROVED`** | Compliance accepted the directive; a formal obligation (`OBL-ADOPTED-*`) was adopted and the directive now appears in the project lead's execution inbox. | `POST /actions/{id}/transition?new_state=APPROVED` as a `COMPLIANCE` user. |
+| **`REJECTED`** | Compliance dismissed the directive as inapplicable or duplicative (terminal). | `POST /actions/{id}/transition?new_state=REJECTED` with recorded rationale note. |
+
+**Stage 2 — Project Execution**
+| State | Definition | Transition Mechanism |
+|---|---|---|
+| **`IN_PROGRESS`** | Project lead accepted the directive; work underway. | `POST /actions/{id}/transition?new_state=IN_PROGRESS` as the assigned `PROJECT_LEAD`. |
+| **`DONE`** | Physical or administrative compliance work completed; obligation materialized (terminal). | `POST /actions/{id}/transition?new_state=DONE` as the assigned `PROJECT_LEAD` (from `APPROVED` or `IN_PROGRESS`). |
+
+**Modification loop (both stages):** any modification of the directive text via `POST /actions/{id}/override` requires a mandatory rationale, preserves the original text on the record (`original_action`, `override_rationale`, `updated_by`), and sets the state back to `PENDING` so compliance re-reviews it.
 
 ---
 
@@ -420,16 +453,17 @@ stateDiagram-v2
 sequenceDiagram
     autonumber
     actor Reviewer as Compliance Analyst
+    actor Lead as Project Lead
     participant Svc as StrataService
     participant Diff as DiffEngine
     participant Class as ChangeClassifier
     participant Val as CitationValidator
     participant Map as ImpactMapper
-    participant ES as EventStore
-    participant Inbox as Action Inbox
+    participant DB as SQLite DB
+    participant Inbox as Compliance Review Inbox
 
     Reviewer->>Svc: Ingest Proceeding v(n) (Final Rule)
-    Svc->>ES: Append PROCEEDING_VERSION_INGESTED
+    Svc->>DB: Persist Version & Paragraphs
     Svc->>Diff: align_and_diff(v(n-1), v(n))
     Diff-->>Svc: Delta Paragraph Pairs
     Svc->>Class: classify_diff_pair(delta)
@@ -442,15 +476,20 @@ sequenceDiagram
     end
     Svc->>Map: map_change_impact(ChangeRecord, CompanyContext)
     Map-->>Svc: List[ImpactMapping] with dual citations
-    
+
     alt Confidence is HIGH or MEDIUM
         Svc->>Svc: Resolve owner & compute urgency (Status=FINAL -> ACT_NOW)
-        Svc->>ES: Append CHANGE_DETECTED, IMPACT_MAPPED, ACTION_RECOMMENDED
-        Svc->>Inbox: Present Action in Reviewer Inbox
+        Svc->>DB: Store ChangeRecord, ImpactMapping, PENDING Action
+        Svc->>Inbox: Present Directive for Compliance Review (Stage 1)
     else Confidence is LOW
-        Svc->>ES: Append ACTION_ESCALATED_TO_EXPERT
-        Svc->>Reviewer: Route to Expert Review Queue
+        Svc->>DB: Store ImpactMapping (Confidence=LOW) + OPEN ExpertReview row
+        Svc->>Reviewer: Route to Expert Review Queue (highlighted critical review)
     end
+
+    Reviewer->>Svc: transition(PENDING -> APPROVED)  [COMPLIANCE role]
+    Svc->>DB: Adopt formal Obligation (OBL-ADOPTED-*) routed to project lead
+    Lead->>Svc: transition(APPROVED -> IN_PROGRESS | DONE)  [PROJECT_LEAD role]
+    Note over Lead,Svc: Stage 2: lead accepts directive, then marks done once the obligation is materialized
 ```
 
 ### 5.2 Strata Service API Contract (`StrataService`)
@@ -464,28 +503,28 @@ class StrataService:
     def ingest_project(proj_id: str, name: str, description: str, owner_id: str, linked_obligations: list[str]) -> Project
     
     def analyze_versions(proceeding_id: str, prev_version_id: str, curr_version_id: str) -> dict
-    def resolve_expert_review(target_id: str, reviewer_id: str, decision: str, rationale: str) -> AuditEvent
+    def list_expert_reviews(status: str = None) -> list[dict]
+    def resolve_expert_review(target_id: str, reviewer_id: str, decision: str, rationale: str) -> dict
     def record_human_override(action_id: str, user_id: str, updated_action_text: str, override_rationale: str) -> ActionRecommendation
+    def transition_action_state(action_id: str, user_id: str, new_state: ActionState, notes: str = "") -> ActionRecommendation
 ```
+
+**Lifecycle & role enforcement (`transition_action_state`)**: the allowed transition table lives on the `ActionState` model (`allowed_transitions()`), mapping each `(from_state, to_state)` pair to the persona (`COMPLIANCE` / `PROJECT_LEAD`) that must perform it; `ADMIN` overrides all. Invalid states or wrong-role actors raise `TransitionError` (surfaced as HTTP 409 with the allowed transitions listed). Approving (`APPROVED`) adopts the formal obligation; overrides always return the directive to `PENDING` with `original_action` + `override_rationale` persisted.
 
 ---
 
-## 6. Living State & Audit Defensibility
+## 6. Human Overrides & Operational Governance
 
-### 6.1 Living Timeline & Audit Reconstruction
-To satisfy PRD **G6** and **FR7.3**, an auditor must be able to reconstruct the historical decision-making process without access to raw model prompts or ephemeral server logs.
-- The `generate_audit_dossier(stream_id)` method queries all events linked to `stream_id` (e.g., `obligation:OBL-NOX-01` or `proceeding:FERC-RM22-14`) ordered by timestamp.
-- Produces a chronological record showing what changed, when the enterprise became aware, what was concluded, what actions were recommended, and who signed off.
-
-### 6.2 Defensible Human Overrides
-When a compliance officer modifies or rejects an action:
-1. The original system recommendation is **never deleted or updated in place**.
-2. A new `HUMAN_OVERRIDE_RECORDED` event is appended containing:
-   - `original_action`: The exact text generated by the system.
-   - `modified_action`: The user's revised instruction.
+### 6.1 Defensible Human Modifications
+When a compliance officer or project lead modifies a directive:
+1. The original recommendation text is preserved on the record (`original_action`) alongside the updated text.
+2. The record stores:
+   - `recommended_action`: The user's revised directive.
    - `override_rationale`: Mandatory explanation for why the system interpretation was adjusted.
-   - `actor_id`: ID of the human reviewer making the modification.
-3. The action state transitions to `MODIFIED` while preserving complete audit reconstructability.
+   - `updated_by`: The acting user (role-attributed: compliance or project lead).
+   - `state`: Reset to `PENDING` — every modification re-enters compliance review.
+   - `updated_at`: Precise timestamp of human intervention.
+3. Every human determination remains transparent and actionable directly within the enterprise workspace, and directives in terminal states (`DONE`, `REJECTED`) can no longer be modified.
 
 ---
 
@@ -495,13 +534,13 @@ When a compliance officer modifies or rejects an action:
 
 | Layer | Component | Role in MVP |
 |---|---|---|
-| **Database** | SQLite (`strata.db`) | Relational entity storage and append-only event store with full foreign key constraints. Zero infrastructure setup. |
+| **Database** | SQLite (`strata.db`) | Relational entity storage with full foreign key constraints. Zero infrastructure setup. |
 | **Document Parser** | `PyMuPDF` (`fitz`) & `BeautifulSoup4` | Open-source PDF text extraction (stripping running headers) and HTML DOM normalization. |
 | **Embeddings** | `sentence-transformers/all-MiniLM-L6-v2` | Dense 384-dimensional vector embeddings for semantic asset retrieval via cosine similarity. |
 | **Diffing Engine** | Python `difflib.SequenceMatcher` | Deterministic structural paragraph alignment without model hallucination risk. |
 | **LLM Classification** | Claude 3.5 Sonnet / Gemini Flash | Schema-constrained materiality and change classification. |
-| **Backend API** | FastAPI (Python 3.9+) | Lightweight REST service serving analysis, inboxes, expert queues, and audit exports. |
-| **Frontend SPA** | React 19 + TypeScript + Vite | Interactive regulatory operations workspace (inboxes, diff viewer, expert queue, living audit dossier). |
+| **Backend API** | FastAPI (Python 3.9+) | Lightweight REST service serving analysis, inboxes, and expert queues. |
+| **Frontend SPA** | React 19 + TypeScript + Vite | Interactive regulatory operations workspace (inboxes, diff viewer, expert queue). |
 | **Test Frameworks** | `behave` & `pytest` | Standard Cucumber/Gherkin BDD specifications and unit/integration quality gates. |
 
 ### 7.2 Production Evolution Path
@@ -538,7 +577,6 @@ Testing is driven by standard Gherkin feature files executed with `behave`:
 1. **`change_detection.feature`**: Verifies paragraph diffing, status transition detection (`PROPOSED → FINAL`), and machine-verifiable citations across FERC Order 2023 versions.
 2. **`impact_mapping.feature`**: Verifies embedding retrieval and dual-grounded citations mapping FERC inverter ride-through rules to the Desert Solar Project (`PROJ-SOLAR-DESERT-02`).
 3. **`confidence_escalation.feature`**: Verifies that ambiguous statutory language in EPA NSPS Subpart KKKK (*"ancillary emergency generation asset"*) is demoted to `LOW` confidence, routed to the Expert Review Queue, and logged upon resolution.
-4. **`living_audit_trail.feature`**: Verifies that human overrides append new audit events preserving the original text, and reconstructs the full living dossier for `OBL-CEMS-02`.
 
 ### 8.2 Automated Quality Gates (`tests/`)
 Pytest unit and integration test suite enforcing five quality gates:
@@ -553,7 +591,7 @@ PYTHONPATH=. behave features/
 | **1. Citation Veracity** | `tests/test_citation_validator.py` | Exact/normalized substring validation passes; hallucinated quotes fail deterministically. |
 | **2. Diff Determinism** | `tests/test_diff_engine.py` | Sequence alignment accurately detects paragraph additions, deletions, and modifications. |
 | **3. Confidence Gating** | `tests/test_confidence_rubric.py` | `SIG_CITE_FAIL` and `SIG_AMBIG_TERM` force `LOW` confidence and trigger escalation. |
-| **4. Event Immutability** | `tests/test_database_and_events.py` | Appending events preserves chronological integrity and enables dossier reconstruction. |
+| **4. Relational Persistence** | `tests/test_database_and_events.py` | Relational tables preserve entity integrity, foreign keys, and status transitions. |
 | **5. End-to-End Integration**| `tests/test_end_to_end.py` | Runs the full pipeline on real FERC and EPA regulations against the two enterprise test projects. |
 | **6. Live LLM E2E** | `tests/test_live_llm_e2e.py` | Runs the complete pipeline with real model inference (Gemini, Claude, GPT-4o) and checks citations. |
 
@@ -567,8 +605,8 @@ cd frontend && npm test
 
 | UI Test Module | Verification Scope & Assertions |
 |---|---|
-| **`components.test.tsx`** | 1. **Header**: Renders logo, status chip (`FINAL RULE`), LLM indicator, and tests proceeding toggle.<br>2. **OverviewTab**: Validates metric card counts, capital project summaries, and compliance obligations.<br>3. **ChangeDiffViewer**: Asserts dual-column comparative citations with exact character highlights.<br>4. **ActionInbox**: Validates action directives, owner badges, and urgency filtering (`ACT_NOW` vs `MONITOR`).<br>5. **HumanOverrideModal**: Verifies modal opening, input of revised directive and mandatory rationale, and commit handling.<br>6. **ExpertReviewQueue**: Verifies low-confidence escalation display, trigger signal chips (`SIG_AMBIG_TERM`), and resolution prompts.<br>7. **AuditTimelineStream**: Validates chronological event stream reconstruction and entity presets. |
-| **`App.test.tsx`** | 1. **Full Workspace Navigation**: Validates seamless tab switching between Dashboard, Changes, Actions, Expert Queue, and Audit Stream.<br>2. **Live Analysis Trigger**: Mocks API responses, executes "Run Live Analysis", verifies loading state, and confirms dynamic UI updates across all tabs. |
+| **`components.test.tsx`** | 1. **Header**: Renders logo, status chip (`FINAL RULE`), LLM indicator, and tests proceeding toggle.<br>2. **OverviewTab**: Validates metric card counts, capital project summaries, and compliance obligations.<br>3. **ChangeDiffViewer**: Asserts dual-column comparative citations with exact character highlights.<br>4. **ActionInbox**: Validates action directives, owner badges, and urgency filtering (`ACT_NOW` vs `MONITOR`).<br>5. **HumanOverrideModal**: Verifies modal opening, input of revised directive and mandatory rationale, and commit handling.<br>6. **ExpertReviewQueue**: Verifies low-confidence escalation display, trigger signal chips (`SIG_AMBIG_TERM`), and resolution prompts. |
+| **`App.test.tsx`** | 1. **Full Workspace Navigation**: Validates seamless tab switching between Dashboard, Changes, Actions, and Expert Queue.<br>2. **Live Analysis Trigger**: Mocks API responses, executes "Run Live Analysis", verifies loading state, and confirms dynamic UI updates across all tabs. |
 
 ### 8.4 LLM Usages, Evaluation Benchmarks & GEPA Optimizer
 
@@ -658,7 +696,6 @@ PYTHONPATH=. pytest -v tests/test_live_llm_e2e.py
 | **G3 / FR2.4, FR5.3** | Classify document status (draft vs final) & gate urgency | Status Extractor & Urgency Rules Engine (§3.1, §3.4) | Preamble regex pass. Transition detector emits `STATUS_TRANSITION`. Urgency rules override model. |
 | **G4 / FR4.1, FR4.2** | Map changes to internal obligations, projects, docs | Dense Vector Search & Impact Mapping Engine (§3.3) | Dense embedding retrieval (`sentence-transformers`) feeding dual-grounding LLM reasoner with bidirectional citations. |
 | **G5 / FR5.1, FR5.2** | Recommend actionable tasks & route to owners | Action Recommendation & Routing Engine (§3.4) | Model drafts action; owner is resolved deterministically from entity metadata (`owner_id`). |
-| **G6 / FR7.1, FR7.3** | Append-only living state & auditable timeline | Event Sourcing & Projection Engine (§4.3, §6.1) | Immutable `audit_events` table. Deterministic `generate_audit_dossier` reconstructs complete history. |
 | **G7 / FR6.1, FR6.3** | Transparent confidence rubric & Expert Escalation | Confidence Scoring Engine & Expert Queue (§3.5) | Explicit multi-signal rubric. `LOW` confidence structurally blocks action routing, dispatching to queue. |
 | **G8 / FR4.3** | Detect conflicts & dependencies across regulations | Many-to-Many Impact Propagation (§3.3) | Document impacts automatically cascade to linked obligations and projects on shared timelines. |
-| **FR7.4** | Defensible Human Overrides | Human Override Handler (§6.2) | Overrides append new `HUMAN_OVERRIDE_RECORDED` events preserving both model hypothesis and user correction. |
+| **FR5.5** | Two-stage persona-owned action lifecycle | Action Lifecycle State Machine (§3.4, §4.4.3) | `allowed_transitions()` table on `ActionState`; role-checked transitions in `StrataService.transition_action_state` (409 on violation); obligation adoption on approval; persisted audit fields (`updated_by`, `original_action`, `override_rationale`, `state_note`). |

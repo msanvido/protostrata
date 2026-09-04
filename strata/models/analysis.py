@@ -26,11 +26,22 @@ class ActionUrgency(str, Enum):
     ACT_NOW = "ACT_NOW"
 
 class ActionState(str, Enum):
-    PENDING = "PENDING"
-    ACCEPTED = "ACCEPTED"
-    MODIFIED = "MODIFIED"
-    REJECTED = "REJECTED"
-    DONE = "DONE"
+    PENDING = "PENDING"            # Awaiting compliance review
+    APPROVED = "APPROVED"          # Compliance accepted & adopted as obligation; visible to project lead
+    IN_PROGRESS = "IN_PROGRESS"    # Project lead accepted directive; work underway
+    REJECTED = "REJECTED"          # Compliance dismissed as inapplicable (terminal)
+    DONE = "DONE"                  # Obligation materialized (terminal)
+
+    @classmethod
+    def allowed_transitions(cls) -> dict:
+        """Persona-owned transition table: (from, to) -> required role."""
+        return {
+            (cls.PENDING, cls.APPROVED): "COMPLIANCE",
+            (cls.PENDING, cls.REJECTED): "COMPLIANCE",
+            (cls.APPROVED, cls.IN_PROGRESS): "PROJECT_LEAD",
+            (cls.APPROVED, cls.DONE): "PROJECT_LEAD",
+            (cls.IN_PROGRESS, cls.DONE): "PROJECT_LEAD",
+        }
 
 class Citation(BaseModel):
     document_id: str
@@ -70,9 +81,14 @@ class ImpactMapping(BaseModel):
 class ActionRecommendation(BaseModel):
     id: str
     mapping_id: str
+    change_id: Optional[str] = None
     recommended_action: str
     suggested_owner_id: str
     urgency: ActionUrgency
     state: ActionState = ActionState.PENDING
+    original_action: Optional[str] = None        # Pre-override directive text (preserved for audit)
+    override_rationale: Optional[str] = None     # Mandatory rationale from last human modification
+    updated_by: Optional[str] = None             # User id of last transition/override actor
+    state_note: Optional[str] = None             # Optional note recorded with last transition
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

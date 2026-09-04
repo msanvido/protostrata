@@ -26,6 +26,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 }) => {
   const actNowCount = actions.filter(a => a.urgency === 'ACT_NOW').length;
   const pendingActionsCount = actions.filter(a => a.state === 'PENDING').length;
+  const inFlightActionsCount = actions.filter(a => a.state === 'APPROVED' || a.state === 'IN_PROGRESS').length;
   const completedActionsCount = actions.filter(a => a.state === 'DONE').length;
 
   return (
@@ -195,8 +196,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <span className="badge badge-final">{completedActionsCount} Resolved</span>
-            <span className="badge badge-proposed">{pendingActionsCount} Pending Action</span>
+            <span className="badge badge-final">{completedActionsCount} Done</span>
+            <span className="badge badge-high">{inFlightActionsCount} With Project Leads</span>
+            <span className="badge badge-proposed">{pendingActionsCount} Awaiting Compliance Review</span>
           </div>
         </div>
 
@@ -224,7 +226,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </span>
                   </td>
                   <td style={{ padding: '8px' }}>
-                    <span className={`badge ${act.state === 'DONE' ? 'badge-final' : act.state === 'ACCEPTED' ? 'badge-high' : 'badge-proposed'}`}>
+                    <span className={`badge ${act.state === 'DONE' ? 'badge-final' : act.state === 'APPROVED' || act.state === 'IN_PROGRESS' ? 'badge-high' : act.state === 'REJECTED' ? '' : 'badge-proposed'}`}>
                       {act.state}
                     </span>
                   </td>
@@ -232,7 +234,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <button
                       className="btn btn-ghost btn-sm"
                       style={{ fontSize: '0.72rem', padding: '2px 6px' }}
-                      onClick={() => onNavigateProjectLead()}
+                      onClick={() => {
+                        const owningProject = projects.find(p => p.owner_id === act.suggested_owner_id);
+                        onNavigateProjectLead(owningProject?.id);
+                      }}
                     >
                       View
                     </button>
