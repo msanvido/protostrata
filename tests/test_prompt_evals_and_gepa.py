@@ -8,9 +8,26 @@ from strata.evals.evaluator import PromptEvaluator
 from strata.evals.gepa_optimizer import GEPAPromptOptimizer
 
 def test_golden_dataset_structure():
-    assert len(MATERIALITY_BENCHMARK_CASES) >= 5
-    assert len(CITATION_VERACITY_CASES) >= 2
-    assert len(IMPACT_GROUNDING_CASES) >= 2
+    assert len(MATERIALITY_BENCHMARK_CASES) >= 10
+    assert len(CITATION_VERACITY_CASES) >= 6
+    assert len(IMPACT_GROUNDING_CASES) >= 6
+
+    # Verify all change types are represented in golden dataset
+    change_types_covered = {case["expected_change_type"] for case in MATERIALITY_BENCHMARK_CASES}
+    assert "NEW_REQUIREMENT" in change_types_covered
+    assert "DEADLINE_SHIFT" in change_types_covered
+    assert "SCOPE_CHANGE" in change_types_covered
+    assert "REQUIREMENT_REMOVED" in change_types_covered
+    assert "DEFINITION_CHANGE" in change_types_covered
+
+    # Verify both Material and Immaterial cases are present
+    materialities = {case["expected_materiality"] for case in MATERIALITY_BENCHMARK_CASES}
+    assert "MATERIAL" in materialities
+    assert "IMMATERIAL" in materialities
+
+    # Verify negative controls exist in impact grounding
+    has_negative_control = any(case["expected_affected_project"] is None for case in IMPACT_GROUNDING_CASES)
+    assert has_negative_control is True
 
     for case in MATERIALITY_BENCHMARK_CASES:
         assert "expected_materiality" in case

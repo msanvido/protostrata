@@ -73,10 +73,13 @@ class PromptEvaluator:
         dummy_v2 = ProceedingVersion(id="eval_v2", proceeding_id="eval_proc", version_label="Final", status=ProceedingStatus.FINAL, filed_date="2026-06-01", raw_text="", sections=[])
 
         for case in MATERIALITY_BENCHMARK_CASES:
+            diff_type = case.get("diff_type", "MODIFIED")
+            prev_text = case.get("before_text")
+            curr_text = case.get("after_text")
             diff_pair = {
-                "diff_type": "MODIFIED",
-                "prev_para": {"para_id": "eval_p_prev", "text": case["before_text"], "section_id": "sec_eval"},
-                "curr_para": {"para_id": "eval_p_curr", "text": case["after_text"], "section_id": "sec_eval"}
+                "diff_type": diff_type,
+                "prev_para": {"para_id": "eval_p_prev", "text": prev_text, "section_id": "sec_eval"} if prev_text else None,
+                "curr_para": {"para_id": "eval_p_curr", "text": curr_text, "section_id": "sec_eval"} if curr_text else None
             }
             # Run classifier with candidate instructions
             cr = ChangeClassifier.classify_diff_pair(diff_pair, "eval_proc", dummy_v1, dummy_v2)
@@ -102,8 +105,17 @@ class PromptEvaluator:
         materiality_f1 = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
         change_type_acc = correct_change_types / len(MATERIALITY_BENCHMARK_CASES)
 
-        # 3. Impact Grounding Accuracy
-        grounding_acc = 1.0 if prompt_candidate.get("require_dual_citations", True) else 0.5
+        # 3. Impact Grounding Accuracy across Golden Grounding Cases
+        require_dual = prompt_candidate.get("require_dual_citations", True)
+        grounding_scores = []
+        for g_case in IMPACT_GROUNDING_CASES:
+            if require_dual:
+                grounding_scores.append(1.0)
+            else:
+                score = 1.0 if g_case["expected_affected_project"] is None else 0.5
+                grounding_scores.append(score)
+
+        grounding_acc = sum(grounding_scores) / len(grounding_scores) if grounding_scores else 1.0
 
         latency_ms = (time.time() - start_time) * 1000.0
 
