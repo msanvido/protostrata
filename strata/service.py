@@ -154,7 +154,7 @@ class StrataService:
     def create_project(self, proj: Project, creator_id: str = "u_admin") -> Project:
         """Creates a new project, indexes it into vector search, and records an audit event."""
         if not self.repo.get_user(proj.owner_id):
-            self.repo.create_user(User(id=proj.owner_id, name=proj.owner_id, email=f"{proj.owner_id}@enterprise.internal", role=UserRole.ASSIGNEE))
+            self.repo.create_user(User(id=proj.owner_id, name=proj.owner_id, email=f"{proj.owner_id}@enterprise.internal", role=UserRole.PROJECT_LEAD))
         created = self.repo.create_project(proj)
         self.vector_store.add_document(
             item_id=f"proj_{proj.id}",

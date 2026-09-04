@@ -11,7 +11,7 @@ def test_database_and_event_store():
     event_store = EventStore(db)
 
     # Create User
-    user = User(id="u1", name="Alice", email="alice@enterprise.com", role=UserRole.ASSIGNEE)
+    user = User(id="u1", name="Alice", email="alice@enterprise.com", role=UserRole.PROJECT_LEAD)
     repo.create_user(user)
     assert repo.get_user("u1").name == "Alice"
 

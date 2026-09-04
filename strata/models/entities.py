@@ -23,10 +23,7 @@ class DocumentType(str, Enum):
 class UserRole(str, Enum):
     COMPLIANCE = "COMPLIANCE"
     PROJECT_LEAD = "PROJECT_LEAD"
-    LEAD = "LEAD"
     ADMIN = "ADMIN"
-    REVIEWER = "REVIEWER"
-    ASSIGNEE = "ASSIGNEE"
 
 class CharSpan(BaseModel):
     start: int
