@@ -1,4 +1,4 @@
-.PHONY: help install build run dev test test-ui test-bdd test-unit eval optimize-prompts demo reset-db reset clean
+.PHONY: help install build run dev test test-ui test-bdd test-unit eval optimize-prompts demo reset-db seed reset clean
 
 help:
 	@echo "======================================================================"
@@ -10,6 +10,7 @@ help:
 	@echo "  make run        - Start the full application (React UI + FastAPI backend)"
 	@echo "  make dev        - Run Vite frontend dev server with hot-reloading"
 	@echo "  make reset-db   - Reset SQLite database to empty schema (no seed data)"
+	@echo "  make seed       - Reset and seed SQLite database with demo enterprise context & regulations"
 	@echo "  make test       - Run all test suites (UI, BDD, and Unit/Integration)"
 	@echo "  make test-ui    - Run React UI component & integration tests (Vitest)"
 	@echo "  make test-bdd   - Run Cucumber / Gherkin BDD acceptance tests"
@@ -56,6 +57,10 @@ demo:
 reset-db:
 	PYTHONPATH=. python3 -c "from strata.storage.database import Database; Database('strata.db').reset()"
 	@echo "Database strata.db successfully reset (empty schema, no seed data)."
+
+seed:
+	PYTHONPATH=. python3 -c "from strata.seed import seed_database; svc = seed_database('strata.db'); print('Seeded 2 enterprise projects, 3 governing documents, 4 obligations, 2 proceedings (4 versions).')"
+	@echo "Database strata.db successfully seeded with demo data."
 
 reset: reset-db
 

@@ -67,6 +67,7 @@ make install     # Installs Python & Node dependencies
 make build       # Compiles React frontend into production assets
 make run         # Starts backend & opens the React UI in your browser
 make reset-db    # Resets SQLite database to empty schema (no seed data)
+make seed        # Resets and re-seeds the database with demo projects & regulations
 make test        # Runs all test suites (UI, BDD, and Unit/Integration)
 ```
 
@@ -76,7 +77,7 @@ pip install -r requirements.txt
 npm --prefix frontend install && npm --prefix frontend run build
 python3 run.py
 ```
-This seeds the database on first run (restarts preserve your workspace state; use `make reset-db` or `POST /reset` to start over), launches the server, and opens your browser to **http://localhost:8000** (or visit **http://localhost:8000/docs** for the interactive Swagger API).
+This seeds the database on first run (restarts preserve your workspace state; use `make seed` to reseed the demo baseline, or `make reset-db` for an empty schema), launches the server, and opens your browser to **http://localhost:8000** (or visit **http://localhost:8000/docs** for the interactive Swagger API).
 
 ### Walking the full flow in the UI (5 minutes)
 
