@@ -29,15 +29,10 @@ class CharSpan(BaseModel):
     start: int
     end: int
 
-class Sentence(BaseModel):
-    sentence_id: str
-    text: str
-    char_span: CharSpan
-
 class Paragraph(BaseModel):
     para_id: str
     text: str
-    sentences: List[Sentence] = Field(default_factory=list)
+    char_span: Optional[CharSpan] = None
 
 class Section(BaseModel):
     section_id: str

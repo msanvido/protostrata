@@ -69,6 +69,6 @@ class DiffEngine:
                     "section_id": sec.section_id,
                     "para_id": p.para_id,
                     "text": p.text,
-                    "sentences": p.sentences
+                    "char_span": p.char_span.dict() if p.char_span else None
                 })
         return flat

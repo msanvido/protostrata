@@ -33,12 +33,11 @@ Transmission providers must complete studies within 150 days.
     assert len(sections) == 2
     assert sections[0].heading == "### Section 1. Overview"
     assert len(sections[0].paragraphs) == 1
-    assert len(sections[0].paragraphs[0].sentences) == 2
 
-    # Check exact char spans
-    s1 = sections[0].paragraphs[0].sentences[0]
-    assert s1.text in raw_text
-    assert raw_text[s1.char_span.start:s1.char_span.end] == s1.text
+    # Check exact char spans on paragraph unit of change
+    p1 = sections[0].paragraphs[0]
+    assert p1.text in raw_text
+    assert raw_text[p1.char_span.start:p1.char_span.end] == p1.text
 
 def test_metadata_extractor():
     final_text = "UNITED STATES EPA\nFINAL RULE\nThis rule is effective November 6, 2023.\n### Section 1..."

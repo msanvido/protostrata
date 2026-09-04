@@ -1,6 +1,6 @@
 import pytest
 from strata.models.analysis import Citation
-from strata.models.entities import ProceedingVersion, ProceedingStatus, Section, Paragraph, Sentence, CharSpan
+from strata.models.entities import ProceedingVersion, ProceedingStatus, Section, Paragraph, CharSpan
 from strata.pipeline.validator import CitationValidator
 
 def test_citation_validation_exact_and_failure():

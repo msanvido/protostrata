@@ -3,7 +3,7 @@ import sqlite3
 from typing import List, Optional, Dict, Any
 from strata.storage.database import Database
 from strata.models.entities import (
-    User, Proceeding, ProceedingVersion, InternalDocument, Obligation, Project, Section, Paragraph, Sentence
+    User, Proceeding, ProceedingVersion, InternalDocument, Obligation, Project, Section, Paragraph
 )
 from strata.models.analysis import ChangeRecord, ImpactMapping, ActionRecommendation, Citation
 

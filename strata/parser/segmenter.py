@@ -1,6 +1,6 @@
 import re
 from typing import List, Tuple
-from strata.models.entities import Section, Paragraph, Sentence, CharSpan
+from strata.models.entities import Section, Paragraph, CharSpan
 
 class DocumentSegmenter:
     # Heading patterns: Markdown headings (#), legal sections (§, Section X, Part X, Article X)
@@ -9,11 +9,9 @@ class DocumentSegmenter:
         re.MULTILINE | re.IGNORECASE
     )
 
-    SENTENCE_END_PATTERN = re.compile(r'(?<=[.!?])\s+(?=[A-Z0-9"\'])')
-
     @classmethod
     def segment(cls, raw_text: str) -> List[Section]:
-        """Segments raw text into hierarchical Section -> Paragraph -> Sentence with character spans."""
+        """Segments raw text into hierarchical Section -> Paragraph with character spans."""
         sections: List[Section] = []
         
         # Identify heading boundaries
@@ -71,11 +69,11 @@ class DocumentSegmenter:
                 abs_p_start = cur_pos
             
             para_id = f"{sec_id}_p{p_idx}"
-            sentences = cls._parse_sentences(para_id, p_clean, abs_p_start)
+            abs_p_end = abs_p_start + len(p_clean)
             paragraphs.append(Paragraph(
                 para_id=para_id,
                 text=p_clean,
-                sentences=sentences
+                char_span=CharSpan(start=abs_p_start, end=abs_p_end)
             ))
             p_idx += 1
             cur_pos = abs_p_start + len(p_clean)
@@ -85,30 +83,3 @@ class DocumentSegmenter:
             heading=heading,
             paragraphs=paragraphs
         )
-
-    @classmethod
-    def _parse_sentences(cls, para_id: str, para_text: str, para_offset_start: int) -> List[Sentence]:
-        sentences: List[Sentence] = []
-        raw_sents = cls.SENTENCE_END_PATTERN.split(para_text)
-        
-        cur_pos = 0
-        for s_idx, s_text in enumerate(raw_sents, start=1):
-            s_clean = s_text.strip()
-            if not s_clean:
-                continue
-            
-            s_match = para_text.find(s_clean, cur_pos)
-            if s_match != -1:
-                s_start = para_offset_start + s_match
-                cur_pos = s_match + len(s_clean)
-            else:
-                s_start = para_offset_start + cur_pos
-                cur_pos += len(s_clean)
-            
-            s_end = s_start + len(s_clean)
-            sentences.append(Sentence(
-                sentence_id=f"{para_id}_s{s_idx}",
-                text=s_clean,
-                char_span=CharSpan(start=s_start, end=s_end)
-            ))
-        return sentences

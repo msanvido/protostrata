@@ -1,6 +1,6 @@
 from strata.models.entities import (
     ProceedingStatus, ObligationStatus, DocumentType, UserRole,
-    CharSpan, Sentence, Paragraph, Section,
+    CharSpan, Paragraph, Section,
     User, Proceeding, ProceedingVersion, InternalDocument, Obligation, Project, ProjectMilestone
 )
 from strata.models.analysis import (

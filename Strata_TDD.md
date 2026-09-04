@@ -127,9 +127,7 @@ The frontend is implemented as a modern, reactive single-page application (SPA) 
   - Regex text normalizer for plain text and Markdown.
 - **Canonical Address Tree**:
   - `Section`: Heading title and structural identifier (`sec_1`).
-  - `Paragraph`: Discrete narrative unit (`sec_1_p1`).
-  - `Sentence`: Boundary segmentation (`sec_1_p1_s1`).
-  - `char_span`: Absolute character offset tuple `[start, end]` into immutable raw text.
+  - `Paragraph`: Discrete narrative and atomic change unit (`sec_1_p1`) with `char_span: [start, end]`.
 - **Status Classification Pass**:
   - Identifies `status` (`DRAFT`, `PROPOSED`, `FINAL`, `WITHDRAWN`) and filing/effective dates from preamble markers.
 
@@ -190,11 +188,10 @@ Confidence is evaluated against an auditable, multi-signal rules engine:
 Proceeding (id, docket_id, title, jurisdiction)
  └── ProceedingVersion (id, proceeding_id, version_label, status, filed_date, effective_date, raw_text)
       └── Section (section_id, heading)
-           └── Paragraph (para_id, text)
-                └── Sentence (sentence_id, text, char_span: [start, end])
+           └── Paragraph (para_id, text, char_span: [start, end])
 
 CompanyContext:
- ├── User (id, name, email, role: REVIEWER | ASSIGNEE | LEAD | ADMIN)
+ ├── User (id, name, email, role: COMPLIANCE | PROJECT_LEAD | ADMIN)
  ├── Document (id, title, doc_type: POLICY | PROCEDURE | CONTRACT | FILING, owner_id, raw_text, sections)
  ├── Obligation (id, description, owner_id, status: ACTIVE | SUPERSEDED | CLOSED, linked_doc_id)
  └── Project (id, name, description, owner_id, status, linked_obligations, milestones)

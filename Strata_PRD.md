@@ -108,7 +108,7 @@ Requires a global, consolidated cross-enterprise view of all capital projects, a
 - FR7.4: Human overrides of any system claim/mapping/action are recorded alongside the original system output — never replacing it, always alongside it (for defensibility: "the system said X, a human corrected to Y, on this date").
 - FR7.5: Dynamic Project & Regulatory Lifecycle Management:
   - FR7.5.1: Dynamic project creation (`POST /projects`) and deletion (`DELETE /projects/{id}`) with assigned engineering leads, operational status (`ACTIVE`, `PLANNED`, `ON_HOLD`), and vector store re-indexing.
-  - FR7.5.2: Dynamic regulatory docket ingestion (`POST /proceedings`) and deletion (`DELETE /proceedings/{id}`) with canonical coordinate segmentation (`Section → Paragraph → Sentence`).
+  - FR7.5.2: Dynamic regulatory docket ingestion (`POST /proceedings`) and deletion (`DELETE /proceedings/{id}`) with canonical coordinate segmentation (`Section → Paragraph`).
   - FR7.5.3: Baseline All-New Section Analysis: When ingesting a new regulation with no prior baseline, all sections are processed as newly added (`diff_type = ADDED`), classified for substantive materiality and citation veracity, and mapped to enterprise projects.
   - FR7.5.4: Non-destructive audit trail logging for all project and proceeding lifecycle events (`PROJECT_CREATED`, `PROJECT_DELETED`, `PROCEEDING_CREATED`, `PROCEEDING_DELETED`).
 - FR7.6: Persona-Driven Workspace User Interface:
