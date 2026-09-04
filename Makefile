@@ -47,7 +47,7 @@ eval:
 	PYTHONPATH=. pytest -v tests/test_prompt_evals_and_gepa.py tests/test_live_llm_e2e.py
 
 optimize-prompts:
-	PYTHONPATH=. python3 -c "from strata.evals.gepa_optimizer import main; main()"
+	PYTHONPATH=. python3 -m strata.evals.cli
 
 demo:
 	PYTHONPATH=. python3 strata/cli.py

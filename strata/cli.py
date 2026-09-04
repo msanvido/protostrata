@@ -8,7 +8,6 @@ def main():
     parser = argparse.ArgumentParser(description="Strata Regulatory Operations & Intelligence Workspace")
     parser.add_argument("--llm", type=str, default="openrouter", help="LLM Provider: openrouter (default), gemini, anthropic, openai, ollama, or mock")
     parser.add_argument("--model", type=str, default="google/gemini-2.5-flash", help="Specific model ID (default: google/gemini-2.5-flash)")
-    parser.add_argument("--optimize-prompts", action="store_true", help="Optionally run GEPA evolutionary prompt optimizer (build/eval tool)")
     args = parser.parse_args()
 
     print("=" * 80)
@@ -138,19 +137,6 @@ Owners must retain all perimeter inspection records on-site for five years.
     # Audit log verification
     proj_dossier = svc.event_store.generate_audit_dossier("project:PROJ-BESS-PEAKER-03")
     print(f"    - Reconstructed Audit Events for '{new_proj.id}': {proj_dossier['total_events']} events")
-
-    # Optional Prompt Optimization via GEPA (Build/Eval Time Only)
-    if args.optimize_prompts:
-        print("\n[Optional] Executing GEPA Evolutionary Prompt Optimizer...")
-        from strata.evals.gepa_optimizer import GEPAPromptOptimizer
-        optimizer = GEPAPromptOptimizer(population_size=4, generations=2, mutation_rate=0.4)
-        best_cand, best_metrics, history = optimizer.run_optimization()
-        print(f"    - Golden Dataset Evals Completed: {len(history)} Generations")
-        print(f"    - Best Prompt Fitness Score: {best_metrics.fitness_score:.4f}")
-        print(f"    - Verbatim Citation Veracity Rate: {best_metrics.citation_veracity_rate * 100:.1f}% (Hard Gate: {best_metrics.hard_gate_passed})")
-        print(f"    - Materiality Classification F1: {best_metrics.materiality_f1:.4f}")
-        print(f"    - Optimal System Prompt Role: \"{best_cand['system_role']}\"")
-        print(f"    - Enforced Negative Constraints: {len(best_cand['negative_constraints'])} rules active")
 
     print("\n" + "=" * 80)
     print("STRATA MVP & FULL LIFECYCLE DEMONSTRATION COMPLETED SUCCESSFULLY.")

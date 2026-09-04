@@ -90,6 +90,19 @@ PYTHONPATH=. python3 strata/cli.py --llm mock
 
 ---
 
+## Build-Time Prompt Optimization & GEPA CLI
+
+Optimize system prompt roles, negative constraints, and citation strictness offline against golden regulatory benchmarks:
+```bash
+# Run standalone evolutionary prompt optimizer
+make optimize-prompts
+
+# Or run via Python CLI with custom hyperparameters and optional JSON export:
+PYTHONPATH=. python3 -m strata.evals.cli --generations 3 --population-size 6 --export optimal_prompt.json
+```
+
+---
+
 ## Project Structure
 
 ```
