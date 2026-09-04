@@ -44,3 +44,6 @@ htmlcov/
 .vscode/
 *.swp
 *~
+
+# Interview Prep (untracked)
+interview_prep/
